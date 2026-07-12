@@ -7,8 +7,10 @@ import streamlit as st
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from calculation_engine import align_manpower_sales, build_channel_sales_output, build_contract_pricing_output, build_distributor_output, build_explainability, build_financial_chain, build_logistics_output, build_order_capacity_intelligence, build_plant_planning
+from runtime_diagnostics import get_runtime_environment, log_dataframe_shape, log_runtime_event, log_section_end, log_section_start
 
 st.set_page_config(page_title="PBOS — Business Planning Operating System", page_icon="📊", layout="wide")
+log_runtime_event("page_start", **get_runtime_environment())
 
 st.markdown("""
 <style>
@@ -1307,6 +1309,7 @@ dependency_lookup = dependency_registry if not dependency_registry.empty else pd
 logic_lookup = {str(row.get("business_area", "")).strip(): row for _, row in logic_registry.iterrows()} if not logic_registry.empty else {}
 
 with st.sidebar:
+    log_section_start("sidebar_construction")
     st.markdown("### PBOS Planning Controls")
     st.markdown("<div class='pbos-sidebar-caption'>Adjust assumptions to test business scenarios.</div>", unsafe_allow_html=True)
     st.header("Business Planning Inputs")
@@ -1401,6 +1404,7 @@ with st.sidebar:
         institutional_contract_name = st.text_input("Contract / Tender Name", value="Institutional Curry Cut Contract")
         institutional_contract_start_date = st.date_input("Contract Start Date", value=date.today())
         institutional_contract_end_date = st.date_input("Contract End Date", value=date.today())
+    log_section_end("sidebar_construction")
 
 fresh_pct = product_mix.get("FRESH", 0)
 frozen_pct = product_mix.get("FROZEN", 0)
@@ -1447,6 +1451,7 @@ with st.expander("Add or Edit Market", expanded=False):
         "revenue_allocation_cr", "assigned_plant_id", "remarks"
     ]].copy()
     visible_markets = visible_markets.reset_index(drop=True)
+    log_dataframe_shape("market_editor", visible_markets)
     editable_markets = st.data_editor(
         visible_markets,
         num_rows="dynamic",
@@ -1585,6 +1590,7 @@ selected_market_revenue = market_revenue_rupees
 market_distance_km = float(selected_market.get("distance_km", 0.0) or 0.0)
 market_growth_stage = selected_market.get("growth_stage", business_stage) or business_stage
 
+log_section_start("calculation_call")
 revenue_rupees = market_revenue_rupees
 market_results = build_financial_chain(
     product_mix=product_mix,
@@ -1609,6 +1615,7 @@ market_results = build_financial_chain(
     business_stage=business_stage,
 )
 results = market_results
+log_section_end("calculation_call")
 corporate_plant_revenue = sum(result.get("assigned_market_revenue", 0.0) for result in plant_results.values())
 corporate_birds_day = sum(result.get("birds_per_day", 0.0) for result in plant_results.values())
 corporate_capacity_mt_day = sum(result.get("plant_capacity_output", {}).get("installed_capacity_mt_day", 0.0) for result in plant_results.values())
@@ -1920,6 +1927,7 @@ def show_corporate_manpower_drilldown():
             render_corporate_manpower_drilldown()
 
 
+log_section_start("Corporate Summary")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-title'>Corporate Summary</div>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-subtitle'>Executive snapshot of revenue, demand, capacity and staffing.</div>", unsafe_allow_html=True)
@@ -1933,7 +1941,9 @@ with col3:
 with col4:
     render_kpi_card("Corporate Manpower", f"{corporate_manpower:,.0f}", subtitle="Total Employees", icon_key="corporate_manpower", button_label="View team mix", key="corporate_manpower_drilldown", button_action=show_corporate_manpower_drilldown)
 st.markdown("</div>", unsafe_allow_html=True)
+log_section_end("Corporate Summary")
 
+log_section_start("Channel Business Ownership")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-title'>Channel Business Ownership</div>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-subtitle'>Revenue ownership and accountable commercial leadership by channel.</div>", unsafe_allow_html=True)
@@ -2041,6 +2051,7 @@ with own_col9:
         button_action=lambda: show_distributor_channel_drilldown("Total Commercial HC"),
     )
 st.markdown("</div>", unsafe_allow_html=True)
+log_section_end("Channel Business Ownership")
 
 if channel_sales_output.get("reconciliation_warning"):
     st.error(channel_sales_output["reconciliation_warning"])
@@ -2049,6 +2060,7 @@ if channel_sales_output["horeca"]["revenue_mode"] != "PLANNING" and abs(channel_
 if channel_sales_output["institution"]["revenue_mode"] != "PLANNING" and abs(channel_sales_output["institution"]["reconciliation_variance"]) > 0:
     st.warning(f"Institutional / Government contract revenue differs from channel mix allocation by {fmt_currency(channel_sales_output['institution']['reconciliation_variance'])}.")
 
+log_section_start("Market-specific Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-title'>Market-specific Planning</div>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-subtitle'>Selected market view with market-only presentation.</div>", unsafe_allow_html=True)
@@ -2069,7 +2081,9 @@ with col8:
     render_kpi_card("Market Status", market_status, subtitle="Market positioning", icon_key="market_status")
 st.markdown("<div class='pbos-info-banner'>Revenue Share: <b>{:.1f}%</b> | One-way Distance: <b>{:.0f} km</b></div>".format((market_revenue_rupees / corporate_revenue_rupees * 100.0) if corporate_revenue_rupees else 0.0, market_distance_km), unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
+log_section_end("Market-specific Planning")
 
+log_section_start("Commercial & Distribution Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-title'>Commercial & Distribution Planning</div>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-subtitle'>Execution capacity and distributor network for commercial delivery.</div>", unsafe_allow_html=True)
@@ -2174,7 +2188,9 @@ with exec_col6:
         button_action=lambda: show_distributor_channel_drilldown("Total Commercial HC"),
     )
 st.markdown("</div>", unsafe_allow_html=True)
+log_section_end("Commercial & Distribution Planning")
 
+log_section_start("Plant Capacity Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-title'>Plant Capacity Planning</div>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-subtitle'>Capacity required by the plant to support assigned market demand.</div>", unsafe_allow_html=True)
@@ -2194,7 +2210,9 @@ with colp6:
 with colp7:
     plant_kpi_card("Expansion Required", plant_capacity_output["expansion_required"], "plant_kpi_expansion", subtitle="Capex signal", status=plant_capacity_output["expansion_required"], status_type="pbos-status-alert" if plant_capacity_output["expansion_required"] == "Yes" else "pbos-status-neutral")
 st.markdown("</div>", unsafe_allow_html=True)
+log_section_end("Plant Capacity Planning")
 
+log_section_start("Raw Material & Procurement Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-title'>Raw Material & Procurement Planning</div>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-subtitle'>Live bird procurement and raw material conversion for the selected market.</div>", unsafe_allow_html=True)
@@ -2215,7 +2233,9 @@ with proc_col6:
 with proc_col7:
     render_kpi_card("Farms Required", f"{farms_required:,.0f}", subtitle="Supply base support", icon_key="farms_required")
 st.markdown("</div>", unsafe_allow_html=True)
+log_section_end("Raw Material & Procurement Planning")
 
+log_section_start("Logistics Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-title'>Logistics Planning</div>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-subtitle'>Primary live-bird movement and secondary finished-goods delivery.</div>", unsafe_allow_html=True)
@@ -2247,7 +2267,9 @@ with coll8:
 with coll9:
     logistics_kpi_card("Market Distance", f"{secondary_logistics['market_distance_km']:,.0f} km", "logistics_market_distance", subtitle="Plant to market")
 st.markdown("</div>", unsafe_allow_html=True)
+log_section_end("Logistics Planning")
 
+log_section_start("Order & Capacity Intelligence")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-title'>Order & Capacity Intelligence</div>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-subtitle'>Actual order demand compared with planned volume, inventory and plant capacity.</div>", unsafe_allow_html=True)
@@ -2281,7 +2303,9 @@ with order_col12:
     capacity_status_label = "Not Simulated" if capacity_status == "NOT_SIMULATED" else capacity_status
     render_kpi_card("Capacity Status", capacity_status_label, subtitle=order_capacity_intelligence["warning_type"], status=order_capacity_intelligence["persistence_status"], status_type="pbos-status-positive" if capacity_status == "HEALTHY" else "pbos-status-warn", button_label="View details", key="order_capacity_intelligence_details", button_action=show_order_capacity_drilldown, icon_key="capacity_status")
 st.markdown("</div>", unsafe_allow_html=True)
+log_section_end("Order & Capacity Intelligence")
 
+log_section_start("Manpower Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-title'>Manpower Planning</div>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-subtitle'>Department-wise staffing for the selected plant and market plan.</div>", unsafe_allow_html=True)
@@ -2323,8 +2347,11 @@ if manpower_output.get("staffing_bands"):
             "Threshold Status": band.get("threshold_status", ""),
             "Business Reason": band.get("business_reason", ""),
         })
-    st.dataframe(pd.DataFrame(staffing_rows), hide_index=True, width="stretch")
+    staffing_df = pd.DataFrame(staffing_rows)
+    log_dataframe_shape("manpower_staffing_bands", staffing_df)
+    st.dataframe(staffing_df, hide_index=True, width="stretch")
 st.markdown("</div>", unsafe_allow_html=True)
+log_section_end("Manpower Planning")
 
 with st.expander("Reverse Manpower Planning", expanded=False):
     target_sales_hc = st.number_input("CEO Sales Headcount", min_value=int(1), value=int(manpower_output["sales"]), step=int(1), key="reverse_sales_hc")
@@ -2437,6 +2464,7 @@ with st.expander("Reverse Distributor and GT Sales Planning", expanded=False):
     else:
         st.success("Recommendation: distributor capacity supports the current market plan.")
 
+log_section_start("Financial Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-title'>Financial Planning</div>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-subtitle'>Revenue bridge from procurement to EBITDA and PAT.</div>", unsafe_allow_html=True)
@@ -2452,7 +2480,9 @@ with chain_cols[3]:
 with chain_cols[4]:
     render_kpi_card("PAT", fmt_currency(pat), subtitle="Net profit", icon_key="pat", value_class="negative" if pat < 0 else None)
 st.markdown("</div>", unsafe_allow_html=True)
+log_section_end("Financial Planning")
 
+log_section_start("CEO Recommendation")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-title'>CEO Recommendation</div>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-subtitle'>Concise executive view for the current operating plan.</div>", unsafe_allow_html=True)
@@ -2470,6 +2500,7 @@ st.markdown(
         unsafe_allow_html=True,
 )
 st.markdown("</div>", unsafe_allow_html=True)
+log_section_end("CEO Recommendation")
 
 st.caption(f"Current stage: {business_stage}. {stage['automation_note']}")
 st.markdown(
@@ -2486,4 +2517,5 @@ st.markdown(
         """,
         unsafe_allow_html=True,
 )
+log_runtime_event("page_completion")
 
