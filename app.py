@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-st.set_page_config(page_title="PBOS — Business Planning Operating System", page_icon="📊", layout="wide")
+st.set_page_config(page_title="PBOS ΓÇö Business Planning Operating System", page_icon="≡ƒôè", layout="wide")
 
 BASE = Path(__file__).parent
 
@@ -17,7 +17,7 @@ def parse_num(x):
     if s == "" or s.lower() in {"nan", "none"}:
         return None
     is_pct = "%" in s
-    s = s.replace("₹", "").replace(",", "").replace("%", "").strip()
+    s = s.replace("Γé╣", "").replace(",", "").replace("%", "").strip()
     s = re.sub(r"[^0-9.\-]", "", s)
     if s in {"", "-", "."}:
         return None
@@ -37,21 +37,21 @@ def normalize_hc(v):
 
 def money(v):
     if v is None or pd.isna(v):
-        return "—"
+        return "ΓÇö"
     v = float(v)
     sign = "-" if v < 0 else ""
     v = abs(v)
     if v >= 10_000_000:
-        return f"{sign}₹{v/10_000_000:.2f} Cr"
+        return f"{sign}Γé╣{v/10_000_000:.2f} Cr"
     if v >= 100_000:
-        return f"{sign}₹{v/100_000:.2f} L"
-    return f"{sign}₹{v:,.0f}"
+        return f"{sign}Γé╣{v/100_000:.2f} L"
+    return f"{sign}Γé╣{v:,.0f}"
 
 def fmt(v, unit=""):
     if v is None or pd.isna(v):
-        return "—"
+        return "ΓÇö"
     unit = str(unit)
-    if unit == "₹":
+    if unit == "Γé╣":
         return money(v)
     if unit == "%":
         return f"{float(v)*100:.1f}%" if abs(float(v)) < 2 else f"{float(v):.1f}%"
@@ -133,7 +133,7 @@ def show_about_pbos():
         if hasattr(st, "dialog"):
                 @st.dialog("About PBOS")
                 def _about_dialog():
-                        st.markdown("### PBOS — Business Planning Operating System")
+                        st.markdown("### PBOS ΓÇö Business Planning Operating System")
                         st.write("Version 1.0 MVP")
                         st.write("Created by:")
                         st.write("Sumit Kumar Mukherjee")
@@ -155,7 +155,7 @@ hero_left, hero_right = st.columns([0.84, 0.16])
 with hero_left:
         st.markdown("""
         <div class="hero">
-            <h1>PBOS — Business Planning Operating System</h1>
+            <h1>PBOS ΓÇö Business Planning Operating System</h1>
             <p>Scenario-based planning for revenue, channels, plant capacity, procurement, logistics, manpower and profitability.</p>
             <div class="hero-meta">
                 <span class="hero-chip">Version 1.0 MVP</span>
@@ -183,13 +183,13 @@ with st.sidebar:
     mkt_default = driver_value(drivers, "MKT_PCT") or 0.06
     wc_days_default = driver_value(drivers, "INV_DAYS") or 35
 
-    revenue_target = st.number_input("Revenue Target (₹)", value=float(rev_default), step=5_000_000.0, format="%.0f")
-    bird_rate = st.number_input("Live Bird Rate (₹/kg)", value=float(bird_default), step=1.0)
+    revenue_target = st.number_input("Revenue Target (Γé╣)", value=float(rev_default), step=5_000_000.0, format="%.0f")
+    bird_rate = st.number_input("Live Bird Rate (Γé╣/kg)", value=float(bird_default), step=1.0)
     yield_pct = st.slider("Planning Yield %", min_value=0.50, max_value=0.90, value=float(yield_default), step=0.01, format="%.2f")
     plant_capacity = st.number_input("Plant Capacity (MT/month)", value=float(cap_default), step=5.0)
     marketing_pct = st.slider("Marketing % of Revenue", min_value=0.00, max_value=0.15, value=float(mkt_default), step=0.005, format="%.3f")
     inventory_days = st.number_input("Inventory Days", value=float(wc_days_default), step=1.0)
-    run = st.button("Run Scenario", type="primary", use_container_width=True)
+    run = st.button("Run Scenario", type="primary", width="stretch")
 
 rev_cur = kpi_value(dash, "EXE001") or kpi_value(dash, "Revenue") or kpi_value(dash, "Annual Revenue") or 60_000_000
 eb_cur = kpi_value(dash, "EXE003") or kpi_value(dash, "EBITDA") or 5_224_000
@@ -223,16 +223,16 @@ capex_scn = capex_cur + (11_500_000 if capacity_util > 0.90 else 0)
 emp_scn = normalize_hc(emp_cur * ratio * (1 - 0.12))
 
 metrics = [
-    ("💰 Revenue", rev_cur, rev_scn, "₹"),
-    ("📈 Gross Contribution", gc_cur, gc_scn, "₹"),
-    ("🏦 EBITDA", eb_cur, ebitda_scn, "₹"),
-    ("✅ PAT", pat_cur, pat_scn, "₹"),
-    ("💵 Working Capital Requirement", wc_cur, wc_scn, "₹"),
-    ("🐔 Bird Requirement", birds_cur, birds_scn, "Birds/day"),
-    ("🏭 Available Plant Capacity", capacity_cur, plant_capacity, "MT/month"),
-    ("🏗️ CAPEX", capex_cur, capex_scn, "₹"),
-    ("⚙️ OPEX", opex_cur, opex_scn, "₹"),
-    ("👥 Automation-adjusted HC", emp_cur, emp_scn, "HC"),
+    ("≡ƒÆ░ Revenue", rev_cur, rev_scn, "Γé╣"),
+    ("≡ƒôê Gross Contribution", gc_cur, gc_scn, "Γé╣"),
+    ("≡ƒÅª EBITDA", eb_cur, ebitda_scn, "Γé╣"),
+    ("Γ£à PAT", pat_cur, pat_scn, "Γé╣"),
+    ("≡ƒÆ╡ Working Capital Requirement", wc_cur, wc_scn, "Γé╣"),
+    ("≡ƒÉö Bird Requirement", birds_cur, birds_scn, "Birds/day"),
+    ("≡ƒÅ¡ Available Plant Capacity", capacity_cur, plant_capacity, "MT/month"),
+    ("≡ƒÅù∩╕Å CAPEX", capex_cur, capex_scn, "Γé╣"),
+    ("ΓÜÖ∩╕Å OPEX", opex_cur, opex_scn, "Γé╣"),
+    ("≡ƒæÑ Automation-adjusted HC", emp_cur, emp_scn, "HC"),
 ]
 
 dependency_registry = load_dependency_registry()
@@ -262,7 +262,7 @@ if not dependency_registry.empty and changed_driver_values:
                 "Business Reason": row.get("business_reason", ""),
             })
     if rows:
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
 st.subheader("Executive KPIs")
 cols = st.columns(5)
@@ -290,8 +290,8 @@ for i, (name, cur, scn, unit) in enumerate(metrics):
     else:
         status = "Growing" if delta > 0 else "Softening"
         status_color = "#16a34a" if delta > 0 else "#f59e0b"
-    arrow = "▲" if (delta_pct or 0) >= 0 else "▼"
-    delta_text = "—" if delta_pct is None else f"{arrow}{abs(delta_pct):.0f}%"
+    arrow = "Γû▓" if (delta_pct or 0) >= 0 else "Γû╝"
+    delta_text = "ΓÇö" if delta_pct is None else f"{arrow}{abs(delta_pct):.0f}%"
     with cols[i % 5]:
         st.markdown(f"""
         <div class="card">
@@ -311,14 +311,14 @@ left, right = st.columns([1.15, 0.85])
 with left:
     st.subheader("Business Impact: Current vs Scenario")
     comp = pd.DataFrame(metrics, columns=["KPI", "Current", "Scenario", "Unit"])
-    comp["KPI"] = comp["KPI"].str.replace("💰 ","").str.replace("📈 ","").str.replace("🏦 ","").str.replace("✅ ","").str.replace("💵 ","").str.replace("🐔 ","").str.replace("🏭 ","").str.replace("🏗️ ","").str.replace("⚙️ ","").str.replace("👥 ","")
+    comp["KPI"] = comp["KPI"].str.replace("≡ƒÆ░ ","").str.replace("≡ƒôê ","").str.replace("≡ƒÅª ","").str.replace("Γ£à ","").str.replace("≡ƒÆ╡ ","").str.replace("≡ƒÉö ","").str.replace("≡ƒÅ¡ ","").str.replace("≡ƒÅù∩╕Å ","").str.replace("ΓÜÖ∩╕Å ","").str.replace("≡ƒæÑ ","")
     comp_long = comp.melt(id_vars=["KPI", "Unit"], value_vars=["Current", "Scenario"], var_name="Plan", value_name="Value")
     fig = px.bar(
         comp_long[comp_long["KPI"].isin(["Revenue", "EBITDA", "PAT", "Working Capital", "CAPEX", "OPEX"])],
         x="KPI", y="Value", color="Plan", barmode="group", height=410
     )
     fig.update_layout(margin=dict(l=10, r=10, t=30, b=10), legend_title_text="")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 with right:
     st.subheader("Five-Year Revenue Roadmap")
@@ -330,7 +330,7 @@ with right:
     road = pd.DataFrame({"Year": ["FY2027", "FY2028", "FY2029", "FY2030", "FY2031"], "Revenue": values})
     fig2 = px.line(road, x="Year", y="Revenue", markers=True, height=410)
     fig2.update_layout(margin=dict(l=10, r=10, t=30, b=10))
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width="stretch")
 
 st.markdown("---")
 col_a, col_b = st.columns([0.58, 0.42])
@@ -344,7 +344,7 @@ with col_a:
         "Delta": [fmt(m[2]-m[1], m[3]) for m in metrics],
         "Signal": ["Expansion Risk" if m[0].endswith("CAPEX") and capacity_util>0.90 else ("Improves" if m[2] >= m[1] else "Weakens") for m in metrics]
     })
-    st.dataframe(table, use_container_width=True, hide_index=True)
+    st.dataframe(table, width="stretch", hide_index=True)
 
 with col_b:
     st.subheader("PBOS AI Advisor")
@@ -362,6 +362,6 @@ with col_b:
 
 st.markdown("---")
 with st.expander("Raw Dashboard Data", expanded=False):
-    st.dataframe(dash, use_container_width=True)
+    st.dataframe(dash.head(300), width="stretch")
 with st.expander("Strategy Drivers", expanded=False):
-    st.dataframe(drivers, use_container_width=True)
+    st.dataframe(drivers.head(300), width="stretch")

@@ -1,4 +1,4 @@
-﻿import math
+import math
 import os
 import sys
 from datetime import date
@@ -606,11 +606,11 @@ def render_manpower_drilldown(kpi_name):
     st.markdown("**Role Split**")
     split_rows = role_splits.get(role_key, [])
     if split_rows:
-        st.dataframe(pd.DataFrame(split_rows), hide_index=True, use_container_width=True)
+        st.dataframe(pd.DataFrame(split_rows), hide_index=True, width="stretch")
     else:
         st.dataframe(pd.DataFrame([
             {"role": "Total operating team", "responsibility": "Combined headcount across all functions.", "headcount": headcount}
-        ]), hide_index=True, use_container_width=True)
+        ]), hide_index=True, width="stretch")
 
     st.markdown("**What Happens If Reduced**")
     if kpi_name == "Production":
@@ -679,7 +679,7 @@ def render_logistics_drilldown(kpi_name):
             {"Item": "Trips/day", "Value": f"{primary['trips_day']:,.0f}"},
             {"Item": "Vehicles required", "Value": f"{primary['vehicles_required']:,.0f}"},
             {"Item": "Monthly cost", "Value": fmt_currency(primary["cost_month"])},
-        ]), hide_index=True, use_container_width=True)
+        ]), hide_index=True, width="stretch")
         st.write("Business interpretation:")
         st.write(f"The {selected_plant_name} requires {primary['vehicles_required']:,.0f} primary vehicle(s) to lift the planned live-bird volume without interrupting production.")
         return
@@ -698,7 +698,7 @@ def render_logistics_drilldown(kpi_name):
             {"Item": "Vehicles required", "Value": f"{secondary['vehicles_required']:,.0f}"},
             {"Item": "Cold-chain requirement", "Value": secondary["cold_chain_required"]},
             {"Item": "Monthly cost", "Value": fmt_currency(secondary["cost_month"])},
-        ]), hide_index=True, use_container_width=True)
+        ]), hide_index=True, width="stretch")
         st.write("Business interpretation:")
         st.write(f"{selected_market_name} requires {secondary['vehicles_required']:,.0f} secondary vehicle(s) to support daily finished-goods delivery from {selected_plant_name}.")
         return
@@ -747,7 +747,7 @@ def render_order_capacity_drilldown():
             "Status": data.get("status", ""),
             "Commercial Comment": data.get("commercial_comment", ""),
         })
-    st.dataframe(pd.DataFrame(channel_rows), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(channel_rows), hide_index=True, width="stretch")
 
     st.write("Recommendation area")
     recommendation_rows = []
@@ -762,7 +762,7 @@ def render_order_capacity_drilldown():
             "Area": label,
             "Recommendation": " ".join(order_capacity_intelligence.get(key, [])),
         })
-    st.dataframe(pd.DataFrame(recommendation_rows), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(recommendation_rows), hide_index=True, width="stretch")
 
     st.write("Inventory impact")
     inventory = order_capacity_intelligence["inventory_impact"]
@@ -772,7 +772,7 @@ def render_order_capacity_drilldown():
         {"Item": "Fresh expiry risk", "Value": inventory["fresh_expiry_risk"]},
         {"Item": "Frozen storage impact", "Value": f"{inventory['frozen_storage_impact']:,.1f} MT"},
         {"Item": "Stockout risk", "Value": inventory["stockout_risk"]},
-    ]), hide_index=True, use_container_width=True)
+    ]), hide_index=True, width="stretch")
 
     st.write("Line utilization and recommendation hierarchy")
     st.write(f"Line utilization: {order_capacity_intelligence['scenario_line_utilization_pct']:,.1f}%")
@@ -809,7 +809,7 @@ def render_distributor_channel_drilldown(kpi_name):
             {"Item": "Monthly network capacity", "Value": fmt_currency(distributor_output[network_capacity_key])},
             {"Item": "Capacity utilization", "Value": f"{distributor_output[utilization_key]:,.1f}%"},
             {"Item": "Capacity signal", "Value": distributor_output[status_key]},
-        ]), hide_index=True, use_container_width=True)
+        ]), hide_index=True, width="stretch")
         st.write("What happens if partners are reduced")
         st.write("The same revenue has to move through fewer partners, which increases service-frequency pressure, cold-chain execution risk, and account follow-up delays.")
         st.write("CEO recommendation")
@@ -841,7 +841,7 @@ def render_distributor_channel_drilldown(kpi_name):
             {"Item": "Daily calls required", "Value": f"{gt['calls_day']:,.0f}"},
             {"Item": "Supported revenue", "Value": fmt_currency(gt["supported_revenue"])},
             {"Item": "Revenue at risk", "Value": fmt_currency(gt["revenue_at_risk"])},
-        ]), hide_index=True, use_container_width=True)
+        ]), hide_index=True, width="stretch")
         if active_distributors is None:
             st.write("Actual distributor count is not connected. PBOS is showing the planning requirement.")
         st.write("CEO recommendation:")
@@ -856,7 +856,7 @@ def render_distributor_channel_drilldown(kpi_name):
             {"Item": "MT revenue", "Value": fmt_currency(data["revenue"])},
             {"Item": "Accounts", "Value": f"{data['accounts']:,.0f}"},
             {"Item": "KAM required", "Value": f"{data['kam']:,.0f}"},
-        ]), hide_index=True, use_container_width=True)
+        ]), hide_index=True, width="stretch")
         st.write("What happens if headcount is reduced")
         st.write("Chain negotiation slows, listing execution weakens, claims and promotion closure get delayed, and revenue visibility reduces.")
         st.write("CEO recommendation:")
@@ -877,7 +877,7 @@ def render_distributor_channel_drilldown(kpi_name):
             {"Item": "Required KAM", "Value": f"{data['required_kam']:,.0f}"},
             {"Item": "Average Revenue per Platform", "Value": fmt_currency(data["average_revenue_per_platform"])},
             {"Item": "Average Volume per Platform", "Value": f"{data['average_volume_per_platform']:,.0f} kg"},
-        ]), hide_index=True, use_container_width=True)
+        ]), hide_index=True, width="stretch")
         st.write("What happens if headcount is reduced")
         st.write("Platform relationship ownership, buying-region follow-up, replenishment speed, stock-out control, and promotion execution weaken.")
         st.write("CEO recommendation:")
@@ -914,7 +914,7 @@ def render_distributor_channel_drilldown(kpi_name):
             {"Item": "Active Accounts", "Value": f"{data['accounts']:,.0f}"},
             {"Item": "Required HoReCa HC", "Value": f"{data['sales_executives']:,.0f}"},
             {"Item": "Credit Days", "Value": f"{data['credit_days']:,.0f}"},
-        ]), hide_index=True, use_container_width=True)
+        ]), hide_index=True, width="stretch")
         st.write("Contract-rate override will be enabled later through governed commercial approval.")
         if data["revenue_mode"] != "PLANNING" and abs(data["reconciliation_variance"]) > 0:
             st.warning(f"Contract revenue differs from channel mix allocation by {fmt_currency(data['reconciliation_variance'])}.")
@@ -960,7 +960,7 @@ def render_distributor_channel_drilldown(kpi_name):
             {"Item": "Tender / Contract Name", "Value": data["contract_name"]},
             {"Item": "Contract Start Date", "Value": data["contract_start_date"]},
             {"Item": "Contract End Date", "Value": data["contract_end_date"]},
-        ]), hide_index=True, use_container_width=True)
+        ]), hide_index=True, width="stretch")
         if data["revenue_mode"] != "PLANNING" and abs(data["reconciliation_variance"]) > 0:
             st.warning(f"Contract revenue differs from channel mix allocation by {fmt_currency(data['reconciliation_variance'])}.")
         st.write("Required HC reflects tender tracking, bid submission, rate-contract management, compliance documents, order coordination, payment follow-up, and account servicing.")
@@ -982,7 +982,7 @@ def render_distributor_channel_drilldown(kpi_name):
             {"Item": "Contract Rate ₹/kg", "Value": f"{fmt_currency_plain(data['contract_rate_per_kg'], 2)}/kg"},
             {"Item": "Required Volume kg/month", "Value": f"{data['required_volume_kg_month']:,.0f}"},
             {"Item": "Credit Days", "Value": f"{data['credit_days']:,.0f}"},
-        ]), hide_index=True, use_container_width=True)
+        ]), hide_index=True, width="stretch")
         st.write("Required HoReCa HC reflects the number of people needed to manage active hotel, restaurant, caterer, and cloud-kitchen contracts, collections, service levels, and account development.")
         if data["sales_executives"] == 1:
             st.write("One HoReCa executive is sufficient at the current contract volume and account load.")
@@ -1006,7 +1006,7 @@ def render_distributor_channel_drilldown(kpi_name):
             {"Item": "Tender / Contract Name", "Value": data["contract_name"]},
             {"Item": "Contract Start Date", "Value": data["contract_start_date"]},
             {"Item": "Contract End Date", "Value": data["contract_end_date"]},
-        ]), hide_index=True, use_container_width=True)
+        ]), hide_index=True, width="stretch")
         st.write("Required HC reflects tender tracking, bid submission, rate-contract management, compliance documents, order coordination, payment follow-up, and account servicing.")
         if data["account_managers"] == 1:
             st.write("One manager is sufficient for the current tender and contract workload.")
@@ -1035,7 +1035,7 @@ def render_distributor_channel_drilldown(kpi_name):
             {"Item": "Total active accounts supported", "Value": f"{channel_sales_output.get('total_active_accounts_supported', 0):,.0f}"},
             {"Item": "Reporting / order-coordination workload", "Value": "Shared across GT, MT, QCom, HoReCa, and Institutional / Government"},
             {"Item": "Required HC", "Value": f"{channel_sales_output.get('sales_coordinator_mis', 0):,.0f}"},
-        ]), hide_index=True, use_container_width=True)
+        ]), hide_index=True, width="stretch")
         st.write("Why this role is required")
         st.write("It supports reporting, order lines, coordination, and governance across the commercial organization.")
         return
@@ -1451,7 +1451,7 @@ with st.expander("Add or Edit Market", expanded=False):
         visible_markets,
         num_rows="dynamic",
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
         column_config={
             "revenue_allocation_cr": st.column_config.NumberColumn("Revenue Allocation (₹ Cr)", min_value=0.0, step=0.5),
             "distance_km": st.column_config.NumberColumn("Distance (km)", min_value=0.0, step=50.0),
@@ -1903,7 +1903,7 @@ def render_corporate_manpower_drilldown():
         {"Team": "QA / Food Safety", "Headcount": manpower_output["qa_food_safety"]},
         {"Team": "Procurement", "Headcount": manpower_output["procurement"]},
         {"Team": "Total Employees", "Headcount": manpower_output["total_employees"]},
-    ]), hide_index=True, use_container_width=True)
+    ]), hide_index=True, width="stretch")
     st.write("If multiple plants are added later:")
     st.write("Corporate Manpower = sum of plant manpower minus shared corporate manpower and shared roles already consolidated.")
 
@@ -2323,7 +2323,7 @@ if manpower_output.get("staffing_bands"):
             "Threshold Status": band.get("threshold_status", ""),
             "Business Reason": band.get("business_reason", ""),
         })
-    st.dataframe(pd.DataFrame(staffing_rows), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(staffing_rows), hide_index=True, width="stretch")
 st.markdown("</div>", unsafe_allow_html=True)
 
 with st.expander("Reverse Manpower Planning", expanded=False):
