@@ -562,6 +562,180 @@ def fmt_currency_plain(value, decimals=0):
     return f"{sign}₹{abs(value):,.{decimals}f}"
 
 
+FORMULA_METADATA = {
+    "effective_yield": {
+        "label": "Effective Finished-Goods Yield",
+        "formula": "Planning Yield × (1 − Processing Loss %)",
+        "expanded_formula": "Dressed Yield × (1 − Processing Loss %)",
+        "assumptions": "Planning yield converts live weight to dressed output. Processing loss reduces dressed output to saleable finished goods. Mortality is not applied in this yield step.",
+        "business_meaning": "Saleable yield used to translate live input into finished goods.",
+        "related_kpis": "Live Weight Required/month, Birds/day, Raw Material Cost/kg, Live Bird Procurement Spend/month",
+    },
+    "birds_per_day": {
+        "label": "Birds / Day",
+        "formula": "Finished Goods kg/month ÷ Effective Finished-Goods Yield → Live Weight Required/month → Net Birds Required/month → Gross Birds Required/month → Birds/day",
+        "expanded_formula": "Finished Goods kg/month ÷ Effective Finished-Goods Yield = Live Weight Required/month; Live Weight Required/month ÷ Average Bird Weight = Net Birds Required/month; Adjust for Mortality = Gross Birds Required/month; Gross Birds Required/month ÷ Working Days/month = Birds/day",
+        "assumptions": "Finished goods volume is monthly. Average bird weight is the current planning input. Mortality is applied after conversion to gross birds. Working days are the current planning days.",
+        "business_meaning": "Daily bird intake required to support the monthly finished-goods plan.",
+        "related_kpis": "Effective Finished-Goods Yield, Live Weight Required/month, Live Bird Procurement Spend/month, Traders Required, Farms Required",
+    },
+    "live_bird_procurement_spend": {
+        "label": "Live Bird Procurement Spend",
+        "formula": "Live Weight Required × Live Bird Rate",
+        "expanded_formula": "Live Weight Required/month × Live Bird Rate/kg = Live Bird Procurement Spend/month",
+        "assumptions": "Live Bird Rate is the final all-inclusive procurement or lifting rate. Live weight requirement already reflects yield and mortality logic.",
+        "business_meaning": "Monthly upstream bird sourcing cash requirement.",
+        "related_kpis": "Birds/day, Raw Material Cost/kg, Traders Required, Farms Required",
+    },
+    "raw_material_cost_per_kg": {
+        "label": "Raw Material Cost / kg",
+        "formula": "Live Bird Procurement Spend ÷ Finished Goods kg",
+        "expanded_formula": "Live Bird Rate × Live Weight Required ÷ Finished Goods kg",
+        "assumptions": "Live Bird Procurement Spend already reflects the gross bird requirement, so mortality is not counted again here.",
+        "business_meaning": "Live-bird input cost required to produce one kg of finished goods.",
+        "related_kpis": "Live Bird Procurement Spend, Birds/day, Effective Finished-Goods Yield, Gross Contribution",
+    },
+    "packaging_spend": {
+        "label": "Packaging Spend",
+        "formula": "Finished Goods kg/month × Packaging Cost/kg",
+        "expanded_formula": "Finished Goods kg/month × Packaging Cost/kg = Packaging Spend/month",
+        "assumptions": "Packaging cost is a per-kg direct variable cost. It changes profitability but does not change birds/day.",
+        "business_meaning": "Packaging cash requirement for the current finished-goods plan.",
+        "related_kpis": "Gross Contribution, EBITDA, PAT, Delivered Cost/kg",
+    },
+    "processing_spend": {
+        "label": "Processing Spend",
+        "formula": "Finished Goods kg/month × Processing Cost/kg",
+        "expanded_formula": "Finished Goods kg/month × Processing Cost/kg = Processing Spend/month",
+        "assumptions": "Processing cost is a per-kg direct variable cost from the current governed waterfall.",
+        "business_meaning": "Processing cash requirement for the current finished-goods plan.",
+        "related_kpis": "Gross Contribution, EBITDA, PAT, Total Direct Variable Spend",
+    },
+    "transport_spend": {
+        "label": "Transport Spend",
+        "formula": "Finished Goods kg/month × Transport Cost/kg",
+        "expanded_formula": "Finished Goods kg/month × Transport Cost/kg = Transport Spend/month",
+        "assumptions": "Transport cost is a per-kg direct variable cost. It affects delivered cost, gross contribution, EBITDA and PAT, but not procurement quantity.",
+        "business_meaning": "Finished-goods delivery cost for the current channel plan.",
+        "related_kpis": "Delivered Cost/kg, Gross Contribution, EBITDA, PAT",
+    },
+    "total_direct_variable_spend": {
+        "label": "Total Direct Variable Spend",
+        "formula": "Live Bird Spend + Processing Spend + Packaging Spend + Transport Spend + Other Direct Variable Costs",
+        "expanded_formula": "Live Bird Procurement Spend + Processing Spend + Packaging Spend + Transport Spend + Other Direct Variable Spend = Total Direct Variable Spend",
+        "assumptions": "Only governed direct-variable components from the engine are included. No balancing plug is used.",
+        "business_meaning": "Total monthly direct variable cost supporting the current production and sales plan.",
+        "related_kpis": "Gross Contribution, EBITDA, PAT",
+    },
+    "ex_factory_cost_per_kg": {
+        "label": "Ex-factory Cost / kg",
+        "formula": "Raw Material Cost/kg + Processing Cost/kg + Packaging Cost/kg + Factory Overhead/kg",
+        "expanded_formula": "Raw Material Cost/kg + Processing Cost/kg + Packaging Cost/kg + Factory Overhead/kg = Ex-factory Cost/kg",
+        "assumptions": "Uses the canonical engine waterfall components only. Fixed opex stays below contribution.",
+        "business_meaning": "Cost to produce one kg before outbound transport.",
+        "related_kpis": "Raw Material Cost/kg, Delivered Cost/kg, Recommended Delivered Price/kg",
+    },
+    "delivered_cost_per_kg": {
+        "label": "Delivered Cost / kg",
+        "formula": "Ex-factory Cost/kg + Transport Cost/kg",
+        "expanded_formula": "Ex-factory Cost/kg + Transport Cost/kg = Delivered Cost/kg",
+        "assumptions": "Delivered cost adds outbound transport to the ex-factory stack.",
+        "business_meaning": "Total cost to deliver one kg to the market or customer.",
+        "related_kpis": "Ex-factory Cost/kg, Recommended Delivered Price/kg, Gross Contribution",
+    },
+    "recommended_delivered_price_per_kg": {
+        "label": "Recommended Delivered Price / kg",
+        "formula": "Delivered Cost/kg ÷ (1 − Target Margin %)",
+        "expanded_formula": "Delivered Cost/kg ÷ (1 − Target Margin %) = Recommended Delivered Price/kg",
+        "assumptions": "Margin convention is used, not markup. Target margin comes from the current cost-registry or assumption input.",
+        "business_meaning": "Margin-based selling price needed to achieve the target delivered margin.",
+        "related_kpis": "Delivered Cost/kg, Gross Contribution, EBITDA, PAT",
+    },
+    "gross_contribution": {
+        "label": "Gross Contribution",
+        "formula": "Revenue − Total Direct Variable Spend",
+        "expanded_formula": "Revenue − Live Bird Procurement Spend − Processing Spend − Packaging Spend − Transport Spend",
+        "assumptions": "Direct variable spend includes live bird procurement, processing, packaging and transport. Fixed OPEX is below contribution.",
+        "business_meaning": "Direct contribution before operating expenses.",
+        "related_kpis": "Live Bird Procurement Spend, Packaging Spend, Transport Spend, EBITDA, PAT",
+    },
+    "ebitda": {
+        "label": "EBITDA",
+        "formula": "Displayed Gross Contribution − Marketing Spend − Warehouse OPEX",
+        "expanded_formula": "Engine EBITDA − GT Distributor Margin Value",
+        "assumptions": "The page-level corporate summary applies a GT distributor margin deduction on top of the engine output before displaying EBITDA.",
+        "business_meaning": "Operating profit after marketing and warehouse overhead, as shown in the page-level financial summary.",
+        "related_kpis": "Gross Contribution, Marketing Spend, Warehouse OPEX, PAT",
+    },
+    "pat": {
+        "label": "PAT",
+        "formula": "Displayed EBITDA × 75%",
+        "expanded_formula": "(Engine EBITDA − GT Distributor Margin Value) × 75%",
+        "assumptions": "Tax factor is the current simplified page model. The page-level corporate summary applies the GT distributor margin deduction before PAT.",
+        "business_meaning": "Net profit shown by the current simplified PBOS corporate model.",
+        "related_kpis": "EBITDA, Gross Contribution, GT Distributor Margin Value",
+    },
+    "traders_required": {
+        "label": "Traders Required",
+        "formula": "ceil(Birds Required/month ÷ Capacity per Trader)",
+        "expanded_formula": "ceil(Birds Required/month ÷ Average Trader Capacity) = Traders Required",
+        "assumptions": "Capacity input is treated on the same monthly bird-capacity basis as Birds Required in the current engine. Traders aggregate supply from farms in the upstream sourcing model.",
+        "business_meaning": "Upstream live-bird sourcing partner count required to support the current plan.",
+        "related_kpis": "Birds/day, Live Bird Procurement Spend, Farms Required, Primary Trips/day, Primary Vehicles Required",
+    },
+    "farms_required": {
+        "label": "Farms Required",
+        "formula": "ceil(Birds Required/month ÷ Capacity per Farm)",
+        "expanded_formula": "ceil(Birds Required/month ÷ Average Farm Capacity) = Farms Required",
+        "assumptions": "Growing cycle is not separately modelled in the current engine. Farm capacity is treated on the same monthly bird-capacity basis as Birds Required. Mortality remains part of the upstream sourcing logic.",
+        "business_meaning": "Upstream live-bird farm supply base required to support the current plan.",
+        "related_kpis": "Birds/day, Live Bird Procurement Spend, Traders Required, Primary Trips/day, Primary Vehicles Required",
+    },
+    "primary_trips_day": {
+        "label": "Primary Trips / Day",
+        "formula": "Live Bird Weight/day ÷ Vehicle Capacity",
+        "expanded_formula": "ceil(Live Bird Weight/day ÷ Vehicle Capacity) = Primary Trips/day",
+        "assumptions": "Primary logistics uses live-bird weight per day and the current primary vehicle capacity assumption.",
+        "business_meaning": "Daily trip requirement to move live birds from the sourcing network to the plant.",
+        "related_kpis": "Primary Vehicles Required, Live Bird Procurement Spend, Traders Required, Farms Required",
+    },
+    "primary_vehicles_required": {
+        "label": "Primary Vehicles Required",
+        "formula": "ceil(Primary Trips/day ÷ Trips per Vehicle/day)",
+        "expanded_formula": "ceil(Primary Trips/day ÷ Trips per Vehicle/day) = Primary Vehicles Required",
+        "assumptions": "Vehicle count is based on the current trips-per-vehicle planning assumption.",
+        "business_meaning": "Vehicle count required to support the live-bird sourcing plan.",
+        "related_kpis": "Primary Trips/day, Live Bird Procurement Spend, Traders Required, Farms Required",
+    },
+}
+
+
+def build_formula_rows(section_key, current_value, unit, status, worked_calculation, extra_rows=None, planning_status="Capacity Modelled", actual_status="Not Connected", formula_expression=None, assumptions=None, business_meaning=None, related_kpis=None):
+    meta = FORMULA_METADATA[section_key]
+    rows = [
+        {"Item": "KPI Name", "Value": meta["label"]},
+        {"Item": "Current Value", "Value": current_value},
+        {"Item": "Unit", "Value": unit},
+        {"Item": "Status", "Value": status},
+        {"Item": "Formula", "Value": meta["formula"]},
+        {"Item": "Formula Expression", "Value": formula_expression or meta["expanded_formula"]},
+        {"Item": "Worked Calculation", "Value": worked_calculation},
+        {"Item": "Assumptions", "Value": assumptions or meta["assumptions"]},
+        {"Item": "Business Meaning", "Value": business_meaning or meta["business_meaning"]},
+        {"Item": "Related KPIs", "Value": related_kpis or meta["related_kpis"]},
+        {"Item": "Planning Status", "Value": planning_status},
+        {"Item": "Actual Network Status", "Value": actual_status},
+    ]
+    if extra_rows:
+        rows.extend(extra_rows)
+    return rows
+
+
+def render_formula_section(section_key, rows):
+    st.markdown(f"**{FORMULA_METADATA[section_key]['label']}**")
+    render_display_dataframe(st, f"formula_{section_key}", pd.DataFrame(rows), hide_index=True, width="stretch")
+
+
 def validate_required_keys(output, required_keys, context):
     missing = [key for key in required_keys if key not in output]
     if missing:
@@ -944,6 +1118,26 @@ def render_logistics_drilldown(kpi_name):
         ]), hide_index=True, width="stretch")
         st.write("Business interpretation:")
         st.write(f"The {selected_plant_name} requires {primary['vehicles_required']:,.0f} primary vehicle(s) to lift the planned live-bird volume without interrupting production.")
+        render_formula_section("primary_trips_day", build_formula_rows(
+            "primary_trips_day",
+            current_value=f"{primary['trips_day']:,.0f} trips/day",
+            unit="trips/day",
+            status="Reconciled",
+            worked_calculation=f"{primary['live_weight_kg_day']:,.0f} kg/day ÷ {primary['vehicle_capacity_kg']:,.0f} kg = {primary['trips_day']:,.0f} trips/day",
+            related_kpis="Primary Vehicles Required, Live Bird Procurement Spend, Traders Required, Farms Required",
+        ))
+        render_formula_section("primary_vehicles_required", build_formula_rows(
+            "primary_vehicles_required",
+            current_value=f"{primary['vehicles_required']:,.0f} vehicles",
+            unit="vehicles",
+            status="Reconciled",
+            worked_calculation=f"ceil({primary['trips_day']:,.0f} trips/day ÷ {primary_trips_per_vehicle_per_day:,.0f} trips/vehicle/day) = {primary['vehicles_required']:,.0f} vehicles",
+            related_kpis="Primary Trips/day, Live Bird Procurement Spend, Traders Required, Farms Required",
+            extra_rows=[
+                {"Item": "Primary Cost / Month", "Value": fmt_currency(primary["cost_month"])},
+                {"Item": "Primary Cost Formula", "Value": f"{primary['trips_day']:,.0f} trips/day × ({primary['average_distance_km']:,.0f} km × ₹{primary_cost_per_km:,.0f} + ₹{primary_fixed_cost_per_trip:,.0f}) × {working_days:,.0f} working days"},
+            ],
+        ))
         return
 
     if kpi_name.startswith("Secondary") or kpi_name == "Cold Chain Required":
@@ -1338,7 +1532,23 @@ def render_distributor_channel_drilldown(kpi_name):
         return
 
     if kpi_name == "Total Commercial HC":
-        st.write(f"Total commercial manpower: {channel_sales_output['total_commercial_hc']:,.0f}")
+        reconciliation_status = "Reconciled" if channel_sales_output.get("commercial_hc_reconciled", False) else "Not Reconciled"
+        render_display_dataframe(st, "total_commercial_hc_detail", pd.DataFrame([
+            {"Item": "Head of Sales", "Value": f"{int(channel_sales_output.get('head_sales_hc', channel_sales_output.get('sales_manager', 0)) or 0):,.0f}"},
+            {"Item": "General Trade", "Value": f"{int(channel_sales_output.get('general_trade_hc', channel_sales_output.get('gt_sales_executives', 0)) or 0):,.0f}"},
+            {"Item": "Modern Trade", "Value": f"{int(channel_sales_output.get('modern_trade_hc', channel_sales_output.get('mt_kam', 0)) or 0):,.0f}"},
+            {"Item": "Quick Commerce", "Value": f"{int(channel_sales_output.get('quick_commerce_hc', channel_sales_output.get('qcom_kam', 0)) or 0):,.0f}"},
+            {"Item": "E-commerce", "Value": f"{int(channel_sales_output.get('e_commerce_hc', channel_sales_output.get('ecommerce_kam', 0)) or 0):,.0f}"},
+            {"Item": "HoReCa", "Value": f"{int(channel_sales_output.get('horeca_hc', channel_sales_output.get('horeca_sales_hc', 0)) or 0):,.0f}"},
+            {"Item": "Institutional / Government", "Value": f"{int(channel_sales_output.get('institutional_hc', channel_sales_output.get('institution_government_manager', 0)) or 0):,.0f}"},
+            {"Item": "Exports", "Value": f"{int(channel_sales_output.get('export_hc', channel_sales_output.get('exports_manager', 0)) or 0):,.0f}"},
+            {"Item": "Total Commercial HC", "Value": f"{int(channel_sales_output.get('commercial_hc_sum', channel_sales_output.get('total_commercial_hc', 0)) or 0):,.0f}"},
+            {"Item": "Reconciliation Status", "Value": reconciliation_status},
+        ]), hide_index=True, width="stretch")
+        if not channel_sales_output.get("commercial_hc_reconciled", False):
+            st.warning(
+                f"Commercial HC variance detected: reported {int(channel_sales_output.get('commercial_hc_reported', 0) or 0):,.0f} vs component sum {int(channel_sales_output.get('commercial_hc_sum', 0) or 0):,.0f} (variance {int(channel_sales_output.get('commercial_hc_variance', 0) or 0):+,.0f})."
+            )
         st.write(f"Total commercial revenue: {fmt_currency(channel_sales_output.get('total_commercial_revenue', 0.0))}")
         st.write(f"Markets supported: {channel_sales_output.get('total_markets_supported', 1):,.0f}")
         st.write(f"Active accounts supported: {channel_sales_output.get('total_active_accounts_supported', 0):,.0f}")
@@ -2089,18 +2299,33 @@ sales_coordinator_required = bool(
 sales_coordinator_hc = 1 if sales_coordinator_required else 0
 channel_sales_output["sales_coordinator_mis"] = sales_coordinator_hc
 channel_sales_output["sales_coordinator"] = sales_coordinator_hc
-channel_sales_output["total_commercial_hc"] = (
-    int(channel_sales_output.get("sales_manager", 0) or 0)
-    + int(channel_sales_output.get("gt_sales_executives", 0) or 0)
-    + int(channel_sales_output.get("mt_kam", 0) or 0)
-    + int(channel_sales_output.get("qcom_kam", 0) or 0)
-    + int(channel_sales_output.get("ecommerce_kam", 0) or 0)
-    + int(channel_sales_output.get("exports_manager", 0) or 0)
-    + int(channel_sales_output.get("horeca_sales_hc", 0) or 0)
-    + int(channel_sales_output.get("institution_government_manager", 0) or 0)
-    + sales_coordinator_hc
+channel_sales_output["head_sales_hc"] = int(channel_sales_output.get("sales_manager", 0) or 0)
+channel_sales_output["general_trade_hc"] = int(channel_sales_output.get("gt_sales_executives", 0) or 0)
+channel_sales_output["modern_trade_hc"] = int(channel_sales_output.get("mt_kam", 0) or 0)
+channel_sales_output["quick_commerce_hc"] = int(channel_sales_output.get("qcom_kam", 0) or 0)
+channel_sales_output["e_commerce_hc"] = int(channel_sales_output.get("ecommerce_kam", 0) or 0)
+channel_sales_output["horeca_hc"] = int(channel_sales_output.get("horeca_sales_hc", 0) or 0)
+channel_sales_output["institutional_hc"] = int(channel_sales_output.get("institution_government_manager", 0) or 0)
+channel_sales_output["export_hc"] = int(channel_sales_output.get("exports_manager", 0) or 0)
+commercial_hc_sum = (
+    channel_sales_output["head_sales_hc"]
+    + channel_sales_output["general_trade_hc"]
+    + channel_sales_output["modern_trade_hc"]
+    + channel_sales_output["quick_commerce_hc"]
+    + channel_sales_output["e_commerce_hc"]
+    + channel_sales_output["horeca_hc"]
+    + channel_sales_output["institutional_hc"]
+    + channel_sales_output["export_hc"]
 )
-channel_sales_output["total_sales_hc"] = channel_sales_output["total_commercial_hc"]
+commercial_hc_reported = int(channel_sales_output.get("total_commercial_hc", commercial_hc_sum) or commercial_hc_sum)
+commercial_hc_variance = commercial_hc_reported - commercial_hc_sum
+commercial_hc_reconciled = commercial_hc_variance == 0
+channel_sales_output["commercial_hc_sum"] = commercial_hc_sum
+channel_sales_output["commercial_hc_reported"] = commercial_hc_reported
+channel_sales_output["commercial_hc_variance"] = commercial_hc_variance
+channel_sales_output["commercial_hc_reconciled"] = commercial_hc_reconciled
+channel_sales_output["total_commercial_hc"] = commercial_hc_sum
+channel_sales_output["total_sales_hc"] = commercial_hc_sum
 channel_sales_output["total_commercial_revenue"] = total_commercial_revenue
 channel_sales_output["reconciliation_gap"] = commercial_reconciliation_gap
 channel_sales_output["selected_market_revenue"] = selected_market_revenue_output
@@ -2195,9 +2420,10 @@ gt_pricing_basis = "Distributor selling value"
 gt_distributor_margin_value = gt_planned_revenue * (gt_distributor_margin_pct / 100.0)
 gt_company_net_realization = max(0.0, gt_planned_revenue - gt_distributor_margin_value)
 gt_company_net_realization_per_kg = gt_company_net_realization / max(1.0, gt_volume_kg)
-total_variable_cost_per_kg = results["total_direct_variable_spend_month"] / max(1.0, results["finished_goods_kg"])
+total_variable_cost_per_kg = results.get("total_direct_variable_spend_month", 0.0) / max(1.0, results.get("finished_goods_kg", 1.0))
 gt_variable_cost = gt_volume_kg * total_variable_cost_per_kg
 gt_gross_contribution = gt_company_net_realization - gt_variable_cost
+cost_waterfall = results.get("cost_waterfall", {})
 
 channel_sales_output["general_trade"].update({
     "gt_distributor_margin_pct": gt_distributor_margin_pct,
@@ -2262,25 +2488,36 @@ if manpower_role_total != manpower_output["total_employees"]:
 if corporate_manpower != manpower_output["total_employees"]:
     st.warning("Corporate Manpower differed from the final Manpower Planning total. Using final consolidated manpower total as source of truth.")
     corporate_manpower = manpower_output["total_employees"]
-net_yield = results["weighted_yield"]
-finished_goods_kg = results["finished_goods_kg"]
-live_weight_kg = results["live_bird_kg"]
-birds_required = results["birds_required"]
-birds_per_day = results["birds_per_day"]
+net_yield = results.get("weighted_yield", 0.0)
+finished_goods_kg = results.get("finished_goods_kg", 0.0)
+live_weight_kg = results.get("live_bird_kg", 0.0)
+birds_required = results.get("birds_required", 0.0)
+birds_per_day = results.get("birds_per_day", 0.0)
 traders_required = max(1, math.ceil(birds_required / avg_trader_capacity)) if avg_trader_capacity else 1
 farms_required = max(1, math.ceil(birds_required / avg_farm_capacity)) if avg_farm_capacity else 1
 production_lines = plant_capacity_output["production_lines_required"]
 employees = manpower_output["total_employees"]
 warehouse_need = results["warehouse_need"]
 distribution_centre_need = results["distribution_centre_need"]
-live_bird_procurement_spend = results["live_bird_procurement_spend_month"]
-packaging_spend = results["packaging_spend_month"]
-transport_spend = results["transport_spend_month"]
-procurement_spend = results["total_direct_variable_spend_month"]
-gross_contribution = results["gross_contribution"] - gt_distributor_margin_value
-marketing_spend = results["marketing_cost"]
-warehouse_opex = results["warehouse_opex"]
-ebitda = results["ebitda"] - gt_distributor_margin_value
+live_bird_procurement_spend = results.get("live_bird_procurement_spend_month", 0.0)
+processing_spend = results.get("processing_spend_month", results.get("processing_expense", 0.0))
+packaging_spend = results.get("packaging_spend_month", 0.0)
+transport_spend = results.get("transport_spend_month", 0.0)
+other_direct_variable_spend = results.get("other_direct_variable_spend_month", results.get("other_direct_variable_spend", 0.0))
+procurement_spend = results.get("total_direct_variable_spend_month", 0.0)
+direct_variable_component_sum = (
+    float(live_bird_procurement_spend)
+    + float(processing_spend)
+    + float(packaging_spend)
+    + float(transport_spend)
+    + float(other_direct_variable_spend)
+)
+direct_variable_spend_variance = float(procurement_spend) - direct_variable_component_sum
+direct_variable_spend_reconciled = abs(direct_variable_spend_variance) <= 1.0
+gross_contribution = results.get("gross_contribution", 0.0) - gt_distributor_margin_value
+marketing_spend = results.get("marketing_cost", 0.0)
+warehouse_opex = results.get("warehouse_opex", 0.0)
+ebitda = results.get("ebitda", 0.0) - gt_distributor_margin_value
 pat = ebitda * 0.75
 working_capital = results["working_capital"]
 capex = production_lines * stage["capex_per_line"]
@@ -2351,9 +2588,14 @@ def render_procurement_driver_drilldown():
     st.write("KPI impact")
     render_display_dataframe(st, "procurement_kpi_impact", pd.DataFrame([
         {"KPI": "Live Bird Procurement Spend", "Value": fmt_currency(live_bird_procurement_spend)},
+        {"KPI": "Processing Spend", "Value": fmt_currency(processing_spend)},
         {"KPI": "Packaging Spend", "Value": fmt_currency(packaging_spend)},
         {"KPI": "Transport Spend", "Value": fmt_currency(transport_spend)},
+        {"KPI": "Other Direct Variable Spend", "Value": fmt_currency(other_direct_variable_spend)},
+        {"KPI": "Component Sum", "Value": fmt_currency(direct_variable_component_sum)},
         {"KPI": "Total Direct Variable Spend", "Value": fmt_currency(procurement_spend)},
+        {"KPI": "Component Variance vs Total", "Value": fmt_currency(direct_variable_spend_variance)},
+        {"KPI": "Direct Variable Reconciliation", "Value": "Reconciled" if direct_variable_spend_reconciled else "Not Reconciled"},
         {"KPI": "Gross Contribution", "Value": fmt_currency(gross_contribution)},
         {"KPI": "EBITDA", "Value": fmt_currency(ebitda)},
         {"KPI": "PAT", "Value": fmt_currency(pat)},
@@ -2363,6 +2605,177 @@ def render_procurement_driver_drilldown():
         {"Driver": driver, "Affected KPIs": ", ".join(affected)}
         for driver, affected in impact_map.items()
     ]), hide_index=True, width="stretch")
+    st.markdown("### Formula & Assumptions")
+    effective_yield_pct_value = float(waterfall.get("effective_finished_goods_yield_pct", results.get("weighted_yield", 0.0) * 100.0) or 0.0)
+    dressed_yield_pct_value = float(waterfall.get("dressed_yield_pct", yield_pct) or 0.0)
+    processing_loss_pct_value = float(waterfall.get("processing_loss_pct", processing_loss_pct) or 0.0)
+    mortality_pct_value = float(waterfall.get("mortality_pct", mortality_pct) or 0.0)
+    live_bird_rate_value = float(waterfall.get("live_bird_rate_per_kg", live_bird_rate) or 0.0)
+    raw_material_cost_per_kg_value = float(waterfall.get("raw_material_cost_per_finished_kg", 0.0) or 0.0)
+    ex_factory_cost_per_kg_value = float(waterfall.get("total_ex_factory_cost_per_kg", 0.0) or 0.0)
+    delivered_cost_per_kg_value = float(waterfall.get("total_delivered_cost_per_kg", 0.0) or 0.0)
+    recommended_price_per_kg_value = float(waterfall.get("recommended_delivered_price_per_kg", 0.0) or 0.0)
+    processing_cost_per_kg_value = float(waterfall.get("processing_cost_per_kg", 0.0) or 0.0)
+    packaging_cost_per_kg_value = float(waterfall.get("packaging_cost_per_kg", packaging_cost) or 0.0)
+    transport_cost_per_kg_value = float(waterfall.get("transport_cost_per_kg", transport_cost) or 0.0)
+    target_margin_pct_value = float(waterfall.get("target_margin_pct", 0.0) or 0.0)
+    live_weight_required_month = float(live_weight_kg or 0.0)
+    gross_birds_required_month = float(birds_required or 0.0)
+    net_birds_required_month = float(results.get("net_birds_required", 0.0) or 0.0)
+    finished_goods_kg_month = float(finished_goods_kg or 0.0)
+
+    render_formula_section("effective_yield", build_formula_rows(
+        "effective_yield",
+        current_value=f"{effective_yield_pct_value:,.1f}%",
+        unit="%",
+        status="Reconciled",
+        worked_calculation=f"{dressed_yield_pct_value:,.1f}% × (1 − {processing_loss_pct_value:,.1f}%) = {effective_yield_pct_value:,.1f}%",
+        assumptions="Planning yield converts live weight to dressed output. Processing loss reduces dressed output to saleable finished goods. Mortality is not part of finished-goods yield.",
+    ))
+    render_formula_section("birds_per_day", build_formula_rows(
+        "birds_per_day",
+        current_value=f"{birds_per_day:,.0f} birds/day",
+        unit="birds/day",
+        status="Reconciled",
+        worked_calculation=(
+            f"{finished_goods_kg_month:,.0f} kg/month ÷ {effective_yield_pct_value / 100.0:,.3f} = {live_weight_required_month:,.0f} kg/month live weight\n"
+            f"{live_weight_required_month:,.0f} kg/month ÷ {avg_bird_weight:,.1f} kg = {net_birds_required_month:,.0f} net birds/month\n"
+            f"Gross birds required after {mortality_pct_value:,.1f}% mortality = {gross_birds_required_month:,.0f} birds/month\n"
+            f"{gross_birds_required_month:,.0f} birds/month ÷ {working_days:,.0f} working days = {birds_per_day:,.0f} birds/day"
+        ),
+        assumptions="Finished goods volume is monthly. Average bird weight is the current planning input. Mortality is applied after conversion to gross birds. Working days are the current planning days.",
+    ))
+    render_formula_section("live_bird_procurement_spend", build_formula_rows(
+        "live_bird_procurement_spend",
+        current_value=fmt_currency(live_bird_procurement_spend),
+        unit="₹/month",
+        status="Reconciled",
+        worked_calculation=f"{live_weight_required_month:,.0f} kg/month × {fmt_rate_per_kg(live_bird_rate_value)} = {fmt_currency(live_bird_procurement_spend)}",
+        assumptions="Live Bird Rate is the final all-inclusive procurement or lifting rate. Live weight requirement already reflects yield and mortality logic.",
+        related_kpis="Raw Material Cost/kg, Birds/day, Traders Required, Farms Required",
+    ))
+    render_formula_section("raw_material_cost_per_kg", build_formula_rows(
+        "raw_material_cost_per_kg",
+        current_value=f"{fmt_currency_plain(raw_material_cost_per_kg_value, 2)}/kg",
+        unit="₹/kg finished goods",
+        status="Reconciled",
+        worked_calculation=(
+            f"{fmt_currency(live_bird_procurement_spend)} ÷ {finished_goods_kg_month:,.0f} kg = {fmt_currency_plain(raw_material_cost_per_kg_value, 2)}/kg\n"
+            f"Equivalent: {fmt_rate_per_kg(live_bird_rate_value)} × {live_weight_required_month:,.0f} kg ÷ {finished_goods_kg_month:,.0f} kg"
+        ),
+        assumptions="Live Bird Procurement Spend already reflects the gross bird requirement, so mortality is not counted again here.",
+    ))
+    render_formula_section("packaging_spend", build_formula_rows(
+        "packaging_spend",
+        current_value=fmt_currency(packaging_spend),
+        unit="₹/month",
+        status="Reconciled",
+        worked_calculation=f"{finished_goods_kg_month:,.0f} kg/month × {fmt_currency_plain(packaging_cost_per_kg_value, 2)}/kg = {fmt_currency(packaging_spend)}",
+        assumptions="Packaging cost is a per-kg direct variable cost. It changes profitability but does not change birds/day.",
+    ))
+    render_formula_section("processing_spend", build_formula_rows(
+        "processing_spend",
+        current_value=fmt_currency(processing_spend),
+        unit="₹/month",
+        status="Reconciled",
+        worked_calculation=f"{finished_goods_kg_month:,.0f} kg/month × {fmt_currency_plain(processing_cost_per_kg_value, 2)}/kg = {fmt_currency(processing_spend)}",
+        assumptions="Processing cost is a per-kg direct variable cost from the governed engine waterfall.",
+    ))
+    render_formula_section("transport_spend", build_formula_rows(
+        "transport_spend",
+        current_value=fmt_currency(transport_spend),
+        unit="₹/month",
+        status="Reconciled",
+        worked_calculation=f"{finished_goods_kg_month:,.0f} kg/month × {fmt_currency_plain(transport_cost_per_kg_value, 2)}/kg = {fmt_currency(transport_spend)}",
+        assumptions="Transport cost is a per-kg direct variable cost. It affects delivered cost, gross contribution, EBITDA and PAT, but not procurement quantity.",
+    ))
+    render_formula_section("total_direct_variable_spend", build_formula_rows(
+        "total_direct_variable_spend",
+        current_value=fmt_currency(procurement_spend),
+        unit="₹/month",
+        status="Reconciled" if direct_variable_spend_reconciled else "Not Reconciled",
+        worked_calculation=(
+            f"{fmt_currency(live_bird_procurement_spend)} + {fmt_currency(processing_spend)} + {fmt_currency(packaging_spend)} + {fmt_currency(transport_spend)} + {fmt_currency(other_direct_variable_spend)} = {fmt_currency(direct_variable_component_sum)}\n"
+            f"Component Sum {fmt_currency(direct_variable_component_sum)} vs Reported Total {fmt_currency(procurement_spend)} (Variance {fmt_currency(direct_variable_spend_variance)})"
+        ),
+        assumptions="Only governed direct-variable components are included. No hidden balancing amount is applied.",
+        extra_rows=[
+            {"Item": "Live Bird Procurement Spend", "Value": fmt_currency(live_bird_procurement_spend)},
+            {"Item": "Processing Spend", "Value": fmt_currency(processing_spend)},
+            {"Item": "Packaging Spend", "Value": fmt_currency(packaging_spend)},
+            {"Item": "Transport Spend", "Value": fmt_currency(transport_spend)},
+            {"Item": "Other Direct Variable Spend", "Value": fmt_currency(other_direct_variable_spend)},
+            {"Item": "Component Sum", "Value": fmt_currency(direct_variable_component_sum)},
+            {"Item": "Reported Total Direct Variable Spend", "Value": fmt_currency(procurement_spend)},
+            {"Item": "Variance", "Value": fmt_currency(direct_variable_spend_variance)},
+            {"Item": "Reconciliation Status", "Value": "Reconciled" if direct_variable_spend_reconciled else "Not Reconciled"},
+        ],
+        related_kpis="Gross Contribution, EBITDA, PAT",
+    ))
+    render_formula_section("ex_factory_cost_per_kg", build_formula_rows(
+        "ex_factory_cost_per_kg",
+        current_value=f"{fmt_currency_plain(ex_factory_cost_per_kg_value, 2)}/kg",
+        unit="₹/kg",
+        status="Reconciled",
+        worked_calculation=(
+            f"{fmt_currency_plain(raw_material_cost_per_kg_value, 2)}/kg + {fmt_currency_plain(processing_cost_per_kg_value, 2)}/kg + {fmt_currency_plain(packaging_cost_per_kg_value, 2)}/kg + {fmt_currency_plain(float(waterfall.get('factory_overhead_per_kg', 0.0) or 0.0), 2)}/kg = {fmt_currency_plain(ex_factory_cost_per_kg_value, 2)}/kg"
+        ),
+        assumptions="Uses the canonical engine waterfall components only. Fixed opex stays below contribution.",
+    ))
+    render_formula_section("delivered_cost_per_kg", build_formula_rows(
+        "delivered_cost_per_kg",
+        current_value=f"{fmt_currency_plain(delivered_cost_per_kg_value, 2)}/kg",
+        unit="₹/kg",
+        status="Reconciled",
+        worked_calculation=f"{fmt_currency_plain(ex_factory_cost_per_kg_value, 2)}/kg + {fmt_currency_plain(transport_cost_per_kg_value, 2)}/kg = {fmt_currency_plain(delivered_cost_per_kg_value, 2)}/kg",
+        assumptions="Delivered cost adds outbound transport to the ex-factory stack.",
+    ))
+    render_formula_section("recommended_delivered_price_per_kg", build_formula_rows(
+        "recommended_delivered_price_per_kg",
+        current_value=f"{fmt_currency_plain(recommended_price_per_kg_value, 2)}/kg",
+        unit="₹/kg",
+        status="Reconciled",
+        worked_calculation=f"{fmt_currency_plain(delivered_cost_per_kg_value, 2)}/kg ÷ (1 − {target_margin_pct_value:,.1f}%) = {fmt_currency_plain(recommended_price_per_kg_value, 2)}/kg",
+        assumptions="Margin convention is used, not markup. Target margin comes from the current cost registry or assumption input.",
+    ))
+    render_formula_section("gross_contribution", build_formula_rows(
+        "gross_contribution",
+        current_value=fmt_currency(gross_contribution),
+        unit="₹/month",
+        status="Reconciled",
+        worked_calculation=(
+            f"Revenue {fmt_currency(revenue_rupees)} − Total Direct Variable Spend {fmt_currency(procurement_spend)} = Engine Gross Contribution {fmt_currency(results.get('gross_contribution', 0.0))}\n"
+            f"Engine Gross Contribution {fmt_currency(results.get('gross_contribution', 0.0))} − GT Distributor Margin {fmt_currency(gt_distributor_margin_value)} = Displayed Gross Contribution {fmt_currency(gross_contribution)}"
+        ),
+        assumptions="Direct variable spend includes live bird procurement, processing, packaging and transport. Fixed OPEX is below contribution.",
+        extra_rows=[
+            {"Item": "Direct Variable Breakdown", "Value": f"Live bird procurement {fmt_currency(live_bird_procurement_spend)}; processing {fmt_currency(processing_spend)}; packaging {fmt_currency(packaging_spend)}; transport {fmt_currency(transport_spend)}; other {fmt_currency(other_direct_variable_spend)}"},
+            {"Item": "GT Distributor Margin Value", "Value": fmt_currency(gt_distributor_margin_value)},
+        ],
+    ))
+    render_formula_section("ebitda", build_formula_rows(
+        "ebitda",
+        current_value=fmt_currency(ebitda),
+        unit="₹/month",
+        status="Reconciled",
+        worked_calculation=f"Engine EBITDA {fmt_currency(results.get('ebitda', 0.0))} − GT Distributor Margin {fmt_currency(gt_distributor_margin_value)} = Displayed EBITDA {fmt_currency(ebitda)}",
+        assumptions="The page-level corporate summary applies a GT distributor margin deduction on top of the engine output before displaying EBITDA.",
+        extra_rows=[
+            {"Item": "Marketing Spend", "Value": fmt_currency(marketing_spend)},
+            {"Item": "Warehouse Opex", "Value": fmt_currency(warehouse_opex)},
+        ],
+    ))
+    render_formula_section("pat", build_formula_rows(
+        "pat",
+        current_value=fmt_currency(pat),
+        unit="₹/month",
+        status="Reconciled",
+        worked_calculation=f"Displayed EBITDA {fmt_currency(ebitda)} × 75% = {fmt_currency(pat)}",
+        assumptions="Tax factor is the current simplified page model. The page-level corporate summary applies the GT distributor margin deduction before PAT.",
+        extra_rows=[
+            {"Item": "Tax Factor", "Value": "75% of EBITDA"},
+        ],
+    ))
 
 
 def show_procurement_driver_drilldown():
@@ -2375,6 +2788,143 @@ def show_procurement_driver_drilldown():
     else:
         with st.expander("Procurement Driver Impact", expanded=True):
             render_procurement_driver_drilldown()
+
+
+def render_traders_required_drilldown():
+    primary_logistics = logistics_output["primary"]
+    total_network_capacity = float(avg_trader_capacity * traders_required)
+    supply_coverage_pct = (total_network_capacity / max(1.0, float(birds_required))) * 100.0 if birds_required else 0.0
+    capacity_utilization_pct = (float(birds_required) / max(1.0, total_network_capacity)) * 100.0 if total_network_capacity else 0.0
+    capacity_gap_surplus = total_network_capacity - float(birds_required)
+    procurement_risk_signal = "Capacity Modelled" if capacity_gap_surplus >= 0 else "Additional Trader Capacity Required"
+    st.write("This network represents upstream live-bird sourcing partners supplying the plant. It is separate from downstream product distributors.")
+    render_display_dataframe(st, "traders_required_summary", pd.DataFrame([
+        {"Item": "Traders Required", "Value": f"{traders_required:,.0f}"},
+        {"Item": "Birds/day", "Value": f"{birds_per_day:,.0f}"},
+        {"Item": "Birds/month", "Value": f"{birds_required:,.0f}"},
+        {"Item": "Live Weight/day", "Value": f"{(live_weight_kg / working_days):,.0f} kg"},
+        {"Item": "Live Weight/month", "Value": f"{live_weight_kg:,.0f} kg"},
+        {"Item": "Capacity per Trader", "Value": f"{avg_trader_capacity:,.0f} birds"},
+        {"Item": "Total Trader Network Capacity", "Value": f"{total_network_capacity:,.0f} birds"},
+        {"Item": "Live Bird Procurement Spend/month", "Value": fmt_currency(live_bird_procurement_spend)},
+        {"Item": "Supply Coverage %", "Value": f"{supply_coverage_pct:,.1f}%"},
+        {"Item": "Capacity Utilization %", "Value": f"{capacity_utilization_pct:,.1f}%"},
+        {"Item": "Actual Trader Count Status", "Value": "Not Connected"},
+        {"Item": "Capacity Gap / Surplus", "Value": f"{capacity_gap_surplus:,.0f} birds"},
+        {"Item": "Procurement Risk Signal", "Value": procurement_risk_signal},
+        {"Item": "Planning Status", "Value": "Capacity Modelled"},
+        {"Item": "Actual Network Status", "Value": "Not Connected"},
+    ]), hide_index=True, width="stretch")
+    st.markdown("### Formula & Assumptions")
+    render_formula_section("traders_required", build_formula_rows(
+        "traders_required",
+        current_value=f"{traders_required:,.0f} traders",
+        unit="partners",
+        status="Capacity Modelled",
+        worked_calculation=f"ceil({birds_required:,.0f} birds/month ÷ {avg_trader_capacity:,.0f} birds/trader) = {traders_required:,.0f} traders",
+        extra_rows=[
+            {"Item": "Capacity per Trader", "Value": f"{avg_trader_capacity:,.0f} birds"},
+            {"Item": "Total Trader Network Capacity", "Value": f"{total_network_capacity:,.0f} birds"},
+            {"Item": "Supply Coverage %", "Value": f"{supply_coverage_pct:,.1f}%"},
+            {"Item": "Capacity Utilization %", "Value": f"{capacity_utilization_pct:,.1f}%"},
+            {"Item": "Capacity Gap / Surplus", "Value": f"{capacity_gap_surplus:,.0f} birds"},
+            {"Item": "Actual Trader Count Status", "Value": "Not Connected"},
+            {"Item": "Procurement Risk Signal", "Value": procurement_risk_signal},
+            {"Item": "Primary Vehicles Required", "Value": f"{primary_logistics['vehicles_required']:,.0f}"},
+            {"Item": "Primary Trips/day", "Value": f"{primary_logistics['trips_day']:,.0f}"},
+            {"Item": "Primary Cost/month", "Value": fmt_currency(primary_logistics['cost_month'])},
+        ],
+        planning_status="Capacity Modelled",
+        actual_status="Not Connected",
+        related_kpis="Birds/day, Live Bird Procurement Spend, Farms Required, Primary Trips/day, Primary Vehicles Required",
+    ))
+    st.write("CEO Recommendation")
+    if capacity_gap_surplus < 0:
+        st.write(f"Add {abs(int(math.ceil(capacity_gap_surplus / max(1.0, avg_trader_capacity))))} trader partner(s) to close the projected daily supply gap.")
+    else:
+        st.write("Current planned trader capacity supports the required live-bird demand.")
+
+
+def show_traders_required_drilldown():
+    if hasattr(st, "dialog"):
+        @st.dialog("Live Bird Trader Network")
+        def _traders_dialog():
+            render_traders_required_drilldown()
+
+        _traders_dialog()
+    else:
+        with st.expander("Live Bird Trader Network", expanded=True):
+            render_traders_required_drilldown()
+
+
+def render_farms_required_drilldown():
+    primary_logistics = logistics_output["primary"]
+    total_network_capacity = float(avg_farm_capacity * farms_required)
+    supply_coverage_pct = (total_network_capacity / max(1.0, float(birds_required))) * 100.0 if birds_required else 0.0
+    capacity_utilization_pct = (float(birds_required) / max(1.0, total_network_capacity)) * 100.0 if total_network_capacity else 0.0
+    capacity_gap_surplus = total_network_capacity - float(birds_required)
+    supply_risk_signal = "Capacity Modelled" if capacity_gap_surplus >= 0 else "Additional Farm Capacity Required"
+    st.write("This network represents the farms required to support live-bird demand under the current sourcing and operating model.")
+    render_display_dataframe(st, "farms_required_summary", pd.DataFrame([
+        {"Item": "Farms Required", "Value": f"{farms_required:,.0f}"},
+        {"Item": "Birds/day", "Value": f"{birds_per_day:,.0f}"},
+        {"Item": "Birds/month", "Value": f"{birds_required:,.0f}"},
+        {"Item": "Live Weight/day", "Value": f"{(live_weight_kg / working_days):,.0f} kg"},
+        {"Item": "Live Weight/month", "Value": f"{live_weight_kg:,.0f} kg"},
+        {"Item": "Capacity per Farm", "Value": f"{avg_farm_capacity:,.0f} birds"},
+        {"Item": "Total Farm Supply Capacity", "Value": f"{total_network_capacity:,.0f} birds"},
+        {"Item": "Growing Cycle assumption", "Value": "Not separately modelled in the current engine; capacity is treated on the same monthly bird-capacity basis as Birds Required."},
+        {"Item": "Mortality assumption", "Value": f"{mortality_pct:,.1f}% mortality is already reflected upstream."},
+        {"Item": "Supply Coverage %", "Value": f"{supply_coverage_pct:,.1f}%"},
+        {"Item": "Capacity Utilization %", "Value": f"{capacity_utilization_pct:,.1f}%"},
+        {"Item": "Actual Farm Count Status", "Value": "Not Connected"},
+        {"Item": "Capacity Gap / Surplus", "Value": f"{capacity_gap_surplus:,.0f} birds"},
+        {"Item": "Supply Risk Signal", "Value": supply_risk_signal},
+        {"Item": "Planning Status", "Value": "Capacity Modelled"},
+        {"Item": "Actual Network Status", "Value": "Not Connected"},
+    ]), hide_index=True, width="stretch")
+    st.markdown("### Formula & Assumptions")
+    render_formula_section("farms_required", build_formula_rows(
+        "farms_required",
+        current_value=f"{farms_required:,.0f} farms",
+        unit="farms",
+        status="Capacity Modelled",
+        worked_calculation=f"ceil({birds_required:,.0f} birds/month ÷ {avg_farm_capacity:,.0f} birds/farm) = {farms_required:,.0f} farms",
+        extra_rows=[
+            {"Item": "Capacity per Farm", "Value": f"{avg_farm_capacity:,.0f} birds"},
+            {"Item": "Total Farm Supply Capacity", "Value": f"{total_network_capacity:,.0f} birds"},
+            {"Item": "Supply Coverage %", "Value": f"{supply_coverage_pct:,.1f}%"},
+            {"Item": "Capacity Utilization %", "Value": f"{capacity_utilization_pct:,.1f}%"},
+            {"Item": "Capacity Gap / Surplus", "Value": f"{capacity_gap_surplus:,.0f} birds"},
+            {"Item": "Growing Cycle assumption", "Value": "Not separately modelled in the current engine; capacity is treated on the same monthly bird-capacity basis as Birds Required."},
+            {"Item": "Mortality assumption", "Value": f"{mortality_pct:,.1f}% mortality is already reflected upstream."},
+            {"Item": "Actual Farm Count Status", "Value": "Not Connected"},
+            {"Item": "Supply Risk Signal", "Value": supply_risk_signal},
+            {"Item": "Primary Vehicles Required", "Value": f"{primary_logistics['vehicles_required']:,.0f}"},
+            {"Item": "Primary Trips/day", "Value": f"{primary_logistics['trips_day']:,.0f}"},
+            {"Item": "Primary Cost/month", "Value": fmt_currency(primary_logistics['cost_month'])},
+        ],
+        planning_status="Capacity Modelled",
+        actual_status="Not Connected",
+        related_kpis="Birds/day, Live Bird Procurement Spend, Traders Required, Primary Trips/day, Primary Vehicles Required",
+    ))
+    st.write("CEO Recommendation")
+    if capacity_gap_surplus < 0:
+        st.write(f"Add {abs(int(math.ceil(capacity_gap_surplus / max(1.0, avg_farm_capacity))))} farm equivalent(s) or increase farm capacity before increasing the revenue target.")
+    else:
+        st.write("Current planned farm supply capacity supports the required live-bird demand.")
+
+
+def show_farms_required_drilldown():
+    if hasattr(st, "dialog"):
+        @st.dialog("Live Bird Farm Supply Base")
+        def _farms_dialog():
+            render_farms_required_drilldown()
+
+        _farms_dialog()
+    else:
+        with st.expander("Live Bird Farm Supply Base", expanded=True):
+            render_farms_required_drilldown()
 
 
 log_section_start("Corporate Summary")
@@ -2705,16 +3255,16 @@ proc_col5, proc_col6, proc_col7, proc_col8 = st.columns(4)
 with proc_col5:
     render_kpi_card("Live Bird Procurement Spend", fmt_currency(live_bird_procurement_spend), subtitle="Live bird landed spend", icon_key="procurement_spend", button_label="View details", key="procurement_driver_details", button_action=show_procurement_driver_drilldown)
 with proc_col6:
-    render_kpi_card("Packaging Spend", fmt_currency(packaging_spend), subtitle=f"{fmt_currency_plain(results['cost_waterfall']['packaging_cost_per_kg'], 0)}/kg finished goods", icon_key="procurement_spend")
+    render_kpi_card("Packaging Spend", fmt_currency(packaging_spend), subtitle=f"{fmt_currency_plain(cost_waterfall.get('packaging_cost_per_kg', packaging_cost), 0)}/kg finished goods", icon_key="procurement_spend")
 with proc_col7:
-    render_kpi_card("Transport Spend", fmt_currency(transport_spend), subtitle=f"{fmt_currency_plain(results['cost_waterfall']['transport_cost_per_kg'], 0)}/kg finished goods", icon_key="procurement_spend")
+    render_kpi_card("Transport Spend", fmt_currency(transport_spend), subtitle=f"{fmt_currency_plain(cost_waterfall.get('transport_cost_per_kg', transport_cost), 0)}/kg finished goods", icon_key="procurement_spend")
 with proc_col8:
     render_kpi_card("Total Direct Variable Spend", fmt_currency(procurement_spend), subtitle="Bird + processing + packing + transport", icon_key="procurement_spend", button_label="View details", key="procurement_total_direct_details", button_action=show_procurement_driver_drilldown)
 proc_col9, proc_col10 = st.columns(2)
 with proc_col9:
-    render_kpi_card("Traders Required", f"{traders_required:,.0f}", subtitle="Supply sourcing support", icon_key="traders_required")
+    render_kpi_card("Traders Required", f"{traders_required:,.0f}", subtitle="Supply sourcing support", icon_key="traders_required", button_label="View details", key="proc_traders_required", button_action=show_traders_required_drilldown)
 with proc_col10:
-    render_kpi_card("Farms Required", f"{farms_required:,.0f}", subtitle="Supply base support", icon_key="farms_required")
+    render_kpi_card("Farms Required", f"{farms_required:,.0f}", subtitle="Supply base support", icon_key="farms_required", button_label="View details", key="proc_farms_required", button_action=show_farms_required_drilldown)
 st.markdown("</div>", unsafe_allow_html=True)
 log_section_end("Raw Material & Procurement Planning")
 

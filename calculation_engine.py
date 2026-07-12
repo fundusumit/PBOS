@@ -1163,7 +1163,11 @@ def build_channel_sales_output(market_revenue=0.0, channel_mix=None, working_day
     sales_coordinator = 1 if revenue > 100000000 else 0
     ecommerce_hc = 0
     exports_hc = 0
-    total_hc = sales_manager + gt_hc + mt_hc + qcom_hc + ecommerce_hc + exports_hc + horeca_hc + inst_hc + sales_coordinator
+    commercial_hc_sum = sales_manager + gt_hc + mt_hc + qcom_hc + ecommerce_hc + horeca_hc + inst_hc + exports_hc
+    commercial_hc_reported = commercial_hc_sum
+    commercial_hc_variance = commercial_hc_reported - commercial_hc_sum
+    commercial_hc_reconciled = commercial_hc_variance == 0
+    total_hc = commercial_hc_sum
     gt_outlets = gt_hc * int(_to_float(gt_outlets_per_sales_executive, 120))
     gt_calls_day = gt_hc * _to_float(calls_per_sales_executive_day, 20)
     gt_supported_revenue = gt_hc * _to_float(gt_revenue_per_sales_executive, 1.0)
@@ -1195,18 +1199,30 @@ def build_channel_sales_output(market_revenue=0.0, channel_mix=None, working_day
         "reconciliation_gap": gap,
         "reconciliation_warning": "" if abs(gap) <= 1 else f"Revenue Reconciliation Gap: {gap:,.0f}",
         "sales_manager": sales_manager,
+        "head_sales_hc": sales_manager,
         "gt_sales_executives": gt_hc,
+        "general_trade_hc": gt_hc,
         "mt_kam": mt_hc,
+        "modern_trade_hc": mt_hc,
         "qcom_kam": qcom_hc,
+        "quick_commerce_hc": qcom_hc,
         "ecommerce_hc": ecommerce_hc,
+        "e_commerce_hc": ecommerce_hc,
         "ecommerce_kam": ecommerce_hc,
         "exports_hc": exports_hc,
+        "export_hc": exports_hc,
         "exports_manager": exports_hc,
         "horeca_sales_hc": horeca_hc,
+        "horeca_hc": horeca_hc,
         "institution_government_manager": inst_hc,
+        "institutional_hc": inst_hc,
         "institutional_government_manager": inst_hc,
         "sales_coordinator": sales_coordinator,
         "sales_coordinator_mis": sales_coordinator,
+        "commercial_hc_sum": commercial_hc_sum,
+        "commercial_hc_reported": commercial_hc_reported,
+        "commercial_hc_variance": commercial_hc_variance,
+        "commercial_hc_reconciled": commercial_hc_reconciled,
         "total_commercial_hc": total_hc,
         "total_sales_hc": total_hc,
         "general_trade": {
@@ -1302,7 +1318,8 @@ def build_financial_chain(product_mix=None, channel_mix=None, product_registry=N
     packaging_expense = finished_goods_kg * waterfall["packaging_cost_per_kg"]
     transport_expense = finished_goods_kg * waterfall["transport_cost_per_kg"]
     factory_overhead_expense = finished_goods_kg * waterfall["factory_overhead_per_kg"]
-    total_direct_variable_spend = bird_procurement_cost + processing_expense + packaging_expense + transport_expense
+    other_direct_variable_spend = 0.0
+    total_direct_variable_spend = bird_procurement_cost + processing_expense + packaging_expense + transport_expense + other_direct_variable_spend
     marketing_cost = revenue * _to_float((stage_profile or {}).get("marketing_pct", 0.04) if isinstance(stage_profile, dict) else 0.04, 0.04)
     warehouse_opex = finished_goods_kg * 3.0
     gross_contribution = revenue - total_direct_variable_spend
@@ -1334,8 +1351,10 @@ def build_financial_chain(product_mix=None, channel_mix=None, product_registry=N
         "gt_distributor_margin_pct": waterfall["gt_distributor_margin_pct"],
         "bird_procurement_cost": bird_procurement_cost,
         "live_bird_procurement_spend_month": bird_procurement_cost,
+        "processing_spend_month": processing_expense,
         "packaging_spend_month": packaging_expense,
         "transport_spend_month": transport_expense,
+        "other_direct_variable_spend_month": other_direct_variable_spend,
         "total_direct_variable_spend_month": total_direct_variable_spend,
         "cost_waterfall": waterfall,
         "raw_material_cost_per_finished_kg": waterfall["raw_material_cost_per_finished_kg"],
@@ -1379,10 +1398,13 @@ def build_financial_chain(product_mix=None, channel_mix=None, product_registry=N
         "bird_procurement_cost": bird_procurement_cost,
         "live_bird_procurement_spend_month": bird_procurement_cost,
         "processing_expense": processing_expense,
+        "processing_spend_month": processing_expense,
         "packaging_expense": packaging_expense,
         "packaging_spend_month": packaging_expense,
         "transport_expense": transport_expense,
         "transport_spend_month": transport_expense,
+        "other_direct_variable_spend_month": other_direct_variable_spend,
+        "other_direct_variable_spend": other_direct_variable_spend,
         "factory_overhead_expense": factory_overhead_expense,
         "total_direct_variable_spend_month": total_direct_variable_spend,
         "cost_waterfall": waterfall,
