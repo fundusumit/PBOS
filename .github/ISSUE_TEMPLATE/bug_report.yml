@@ -1,0 +1,111 @@
+name: Bug report
+about: Report a defect in currently implemented PBOS MVP functionality
+title: "[Bug] "
+labels:
+  - bug
+  - current-mvp
+description: Report runtime or output issues in existing PBOS MVP sections only.
+body:
+  - type: dropdown
+    id: affected_section
+    attributes:
+      label: Affected PBOS section
+      options:
+        - Corporate Summary
+        - Channel Business Ownership
+        - Market-specific Planning
+        - Commercial & Distribution Planning
+        - Plant Capacity Planning
+        - Raw Material & Procurement Planning
+        - Logistics Planning
+        - Order & Capacity Intelligence
+        - Manpower Planning
+        - Financial Planning
+        - CEO Recommendation
+      description: Select the section where the issue is observed.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: error_type
+    attributes:
+      label: Error type
+      options:
+        - ImportError
+        - KeyError
+        - ValueError
+        - TypeError
+        - Rendering/UI defect
+        - Incorrect calculation/output
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide exact steps and input path.
+      placeholder: |
+        1. Open PBOS page...
+        2. Set revenue target...
+        3. Click View details...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshot_traceback
+    attributes:
+      label: Screenshot or traceback
+      description: Paste traceback and/or attach screenshot.
+    validations:
+      required: false
+
+  - type: input
+    id: revenue_target
+    attributes:
+      label: Revenue target used
+      placeholder: Example: 75000000
+    validations:
+      required: true
+
+  - type: textarea
+    id: scenario_used
+    attributes:
+      label: Channel/product scenario used
+      description: Include channel mix, product mix, and order scenario mode if used.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue_location
+    attributes:
+      label: Where does the issue occur?
+      options:
+        - Initial load
+        - View details dialog
+        - Both
+    validations:
+      required: true
+
+  - type: input
+    id: affected_file
+    attributes:
+      label: Affected file if known
+      placeholder: Example: pages/Business_Requirement_Planning.py
+    validations:
+      required: false

@@ -51,3 +51,9 @@ python -m streamlit run app.py
 - `dependency_registry.csv` - KPI dependency registry.
 - `logic_registry.csv` - business logic registry.
 - `AGENTS.md` - local agent/project instructions.
+
+## Architecture Decisions
+
+Architecture decisions for the current PBOS MVP are documented in:
+
+- docs/adr/README.md

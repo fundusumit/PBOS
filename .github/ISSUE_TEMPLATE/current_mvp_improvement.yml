@@ -1,0 +1,72 @@
+name: Current MVP improvement
+about: Request a correction or improvement to currently implemented PBOS functionality
+title: "[Current MVP Improvement] "
+labels:
+  - current-mvp
+description: This template is for corrections or improvements to currently implemented PBOS functionality, not future modules.
+body:
+  - type: input
+    id: affected_module
+    attributes:
+      label: Affected existing module
+      placeholder: Example: Order & Capacity Intelligence or Plant Capacity Planning
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_behavior
+    attributes:
+      label: Current behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: requested_correction
+    attributes:
+      label: Requested correction
+    validations:
+      required: true
+
+  - type: textarea
+    id: business_reason
+    attributes:
+      label: Business reason
+    validations:
+      required: true
+
+  - type: textarea
+    id: kpi_affected
+    attributes:
+      label: KPI or output affected
+    validations:
+      required: true
+
+  - type: dropdown
+    id: formulas_change
+    attributes:
+      label: Does this require formula changes?
+      options:
+        - Yes
+        - No
+        - Unsure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ui_change
+    attributes:
+      label: Does this require UI changes?
+      options:
+        - Yes
+        - No
+        - Unsure
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: Provide testable criteria for closure.
+    validations:
+      required: true
