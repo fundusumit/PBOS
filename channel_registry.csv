@@ -1,0 +1,8 @@
+channel_id,channel_name,default_mix_percent,sales_productivity_per_person,marketing_percent,trade_scheme_percent,secondary_freight_percent,returns_percent,collection_days,credit_days,warehouse_requirement,distribution_model,minimum_sales_people,minimum_kam,working_capital_pct
+GT,General Trade,40,0.9,0.02,0.04,0.03,0.03,5,15,No,Direct,4,2,0.20
+MT,Modern Trade,20,0.7,0.025,0.05,0.04,0.02,7,20,Yes,Distributorship,3,2,0.22
+QC,Quick Commerce,10,0.35,0.03,0.02,0.06,0.05,3,7,Yes,Marketplace,2,1,0.24
+ECOM,E-commerce,10,0.45,0.025,0.01,0.04,0.04,4,10,No,Direct,2,1,0.21
+HORECA,HoReCa,15,0.4,0.025,0.03,0.05,0.02,6,18,Yes,Key Account,2,2,0.23
+INST,Institution,3,0.25,0.015,0.01,0.02,0.01,8,30,No,Direct,1,1,0.19
+EXP,Exports,2,0.2,0.01,0.01,0.02,0.01,10,45,Yes,Export,1,1,0.18

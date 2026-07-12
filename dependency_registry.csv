@@ -1,0 +1,31 @@
+driver_id,driver_name,affected_kpi_id,affected_kpi_name,relationship_type,impact_strength,condition,business_reason
+REV_TARGET,Annual Revenue Target,EXE001,Revenue,Direct,High,If increased,Higher revenue ambition directly raises top-line revenue.
+ASP_KG,Average Selling Price / Kg,EXE001,Revenue,Direct,High,If increased,Higher realized price lifts revenue per kg.
+RETAIL_MIX,Retail Mix %,EXE001,Revenue,Direct,Medium,If increased,Shifting mix toward retail increases revenue contribution.
+INST_MIX,Institutional Mix %,EXE001,Revenue,Direct,Medium,If increased,Shifting mix toward institutional channels raises revenue.
+BIRD_RATE,Live Bird Rate,EXE003,EBITDA,Direct,High,If increased,Higher live bird cost compresses EBITDA.
+BIRD_RATE,Live Bird Rate,EXE013,Total OPEX,Direct,Medium,If increased,Procurement cost inflation increases total operating spend.
+MORTALITY,Mortality / Procurement Loss %,EXE009,Birds / Day,Inverse,High,If increased,Higher losses reduce effective birds available per day.
+YIELD,Planning Yield %,EXE009,Birds / Day,Direct,Medium,If increased,Better yield improves effective throughput and birds/day output.
+YIELD,Planning Yield %,EXE002,Gross Contribution,Direct,High,If increased,Improved yield raises conversion efficiency and contribution.
+CAPACITY_MT,Available Plant Capacity MT / Month,EXE010,Plant Capacity MT / Month,Direct,High,If increased,More installed capacity lifts available plant throughput.
+EXP_THRESHOLD,Expansion Threshold %,EXE012,Total CAPEX,Conditional,High,If utilization exceeds threshold,Capacity pressure can trigger expansion capex.
+CAPEX_BUNDLE,Expansion CAPEX Bundle,EXE012,Total CAPEX,Direct,High,If increased,Expansion capex spend increases with the selected bundle.
+INV_DAYS,Inventory Days Target,EXE007,Working Capital Requirement,Direct,High,If increased,More inventory days lock up more working capital.
+RETAIL_CREDIT,Retail Credit Days,EXE007,Working Capital Requirement,Direct,Medium,If increased,Longer retail receivables increase funding needs.
+INST_CREDIT,Institutional Credit Days,EXE007,Working Capital Requirement,Direct,Medium,If increased,Longer institutional credit terms increase working capital.
+SUPPLIER_CREDIT,Supplier Credit Days,EXE007,Working Capital Requirement,Inverse,Medium,If increased,Longer supplier credit reduces near-term funding need.
+AUTO_GAIN,Automation Productivity Gain %,EXE011,Total Employees,Inverse,High,If increased,Productivity gains can reduce required headcount.
+AUTO_GAIN,Automation Productivity Gain %,EXE003,EBITDA,Direct,High,If increased,Automation lowers operating cost and improves EBITDA.
+ING_INFL,Ingredient Inflation %,EXE013,Total OPEX,Direct,High,If increased,Input inflation raises operating cost.
+ING_INFL,Ingredient Inflation %,EXE002,Gross Contribution,Inverse,High,If increased,Input inflation erodes gross contribution margin.
+PACK_INFL,Packaging Inflation %,EXE013,Total OPEX,Direct,Medium,If increased,Packaging inflation raises total opex.
+UTIL_INFL,Utility Inflation %,EXE013,Total OPEX,Direct,Medium,If increased,Higher utilities increase operating cost.
+SAL_INFL,Salary Inflation %,EXE013,Total OPEX,Direct,Medium,If increased,Salary inflation raises personnel cost.
+MKT_PCT,Marketing % of Revenue,EXE013,Total OPEX,Direct,Medium,If increased,Higher marketing spend increases opex.
+TRADE_PCT,Trade Scheme %,EXE013,Total OPEX,Direct,Medium,If increased,Trade promotion spend increases opex.
+INTEREST,Interest Rate %,EXE003,EBITDA,Inverse,Medium,If increased,Financing cost pressure reduces EBITDA.
+REV_TARGET,Annual Revenue Target,EXE003,EBITDA,Direct,Medium,If increased,Scale improves contribution and EBITDA.
+REV_TARGET,Annual Revenue Target,EXE004,PAT,Direct,Medium,If increased,Revenue growth generally improves profitability.
+REV_TARGET,Annual Revenue Target,EXE012,Total CAPEX,Conditional,High,If growth is sustained,Capacity expansion can require additional capex.
+REV_TARGET,Annual Revenue Target,EXE007,Working Capital Requirement,Direct,Medium,If increased,Higher revenue usually requires more working capital.

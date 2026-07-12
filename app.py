@@ -1,0 +1,325 @@
+import re
+from pathlib import Path
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
+st.set_page_config(page_title="PBOS Business Plan", page_icon="📊", layout="wide")
+
+BASE = Path(__file__).parent
+
+def parse_num(x):
+    if pd.isna(x):
+        return None
+    if isinstance(x, (int, float)):
+        return float(x)
+    s = str(x).strip()
+    if s == "" or s.lower() in {"nan", "none"}:
+        return None
+    is_pct = "%" in s
+    s = s.replace("₹", "").replace(",", "").replace("%", "").strip()
+    s = re.sub(r"[^0-9.\-]", "", s)
+    if s in {"", "-", "."}:
+        return None
+    try:
+        val = float(s)
+        return val / 100 if is_pct else val
+    except Exception:
+        return None
+
+def normalize_hc(v):
+    if v is None or pd.isna(v):
+        return None
+    v = float(v)
+    if v > 10000:
+        return v / 1000
+    return v
+
+def money(v):
+    if v is None or pd.isna(v):
+        return "—"
+    v = float(v)
+    sign = "-" if v < 0 else ""
+    v = abs(v)
+    if v >= 10_000_000:
+        return f"{sign}₹{v/10_000_000:.2f} Cr"
+    if v >= 100_000:
+        return f"{sign}₹{v/100_000:.2f} L"
+    return f"{sign}₹{v:,.0f}"
+
+def fmt(v, unit=""):
+    if v is None or pd.isna(v):
+        return "—"
+    unit = str(unit)
+    if unit == "₹":
+        return money(v)
+    if unit == "%":
+        return f"{float(v)*100:.1f}%" if abs(float(v)) < 2 else f"{float(v):.1f}%"
+    if unit == "HC":
+        return f"{normalize_hc(v):,.0f} HC"
+    if unit == "MT/month":
+        return f"{float(v):,.0f} MT/month"
+    if "Bird" in unit:
+        return f"{float(v):,.0f} Birds/day"
+    if unit == "Days":
+        return f"{float(v):,.0f} Days"
+    if unit == "kg":
+        return f"{float(v):,.0f} kg"
+    return f"{float(v):,.2f}"
+
+def kpi_value(df, kpi_name, col="Current Value"):
+    key = str(kpi_name).strip()
+    if key:
+        hit = df[df["KPI ID"].astype(str).str.strip().str.lower() == key.lower()]
+        if not hit.empty:
+            return parse_num(hit.iloc[0].get(col))
+    hit = df[df["KPI"].astype(str).str.lower() == key.lower()]
+    if hit.empty:
+        return None
+    return parse_num(hit.iloc[0].get(col))
+
+def driver_value(drivers, driver_id, col="Scenario"):
+    hit = drivers[drivers["Driver ID"].astype(str) == driver_id]
+    if hit.empty:
+        return None
+    return parse_num(hit.iloc[0].get(col))
+
+@st.cache_data
+def load_dependency_registry():
+    path = BASE / "dependency_registry.csv"
+    if not path.exists():
+        return pd.DataFrame(columns=["driver_id", "driver_name", "affected_kpi_id", "affected_kpi_name", "relationship_type", "impact_strength", "condition", "business_reason"])
+    try:
+        return pd.read_csv(path)
+    except Exception:
+        return pd.DataFrame(columns=["driver_id", "driver_name", "affected_kpi_id", "affected_kpi_name", "relationship_type", "impact_strength", "condition", "business_reason"])
+
+@st.cache_data
+def load_data():
+    dash = pd.read_csv(BASE / "dashboard_data.csv")
+    drivers = pd.read_csv(BASE / "strategy_drivers.csv")
+    for col in ["Current Value", "Scenario Value", "Delta", "Delta %", "FY2027", "FY2028", "FY2029", "FY2030", "FY2031"]:
+        if col in dash.columns:
+            dash[col + " Num"] = dash[col].apply(parse_num)
+    drivers["Current Num"] = drivers["Current"].apply(parse_num)
+    drivers["Scenario Num"] = drivers["Scenario"].apply(parse_num)
+    return dash, drivers
+
+dash, drivers = load_data()
+
+st.markdown("""
+<style>
+.main {background:#f7f9fc;}
+.block-container {padding-top:1.2rem;}
+.hero {background:#0B1F33;color:white;padding:20px 26px;border-radius:14px;margin-bottom:18px;}
+.hero h1 {margin:0;font-size:30px;}
+.hero p {margin:4px 0 0 0;color:#c9d6e4;}
+.card {background:white;border:1px solid #e5e7eb;border-radius:14px;padding:14px 16px;box-shadow:0 2px 8px rgba(15,23,42,.06);min-height:190px;height:190px;display:flex;flex-direction:column;justify-content:flex-start;gap:4px;overflow:hidden;}
+.card-title {font-size:13px;color:#64748b;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700;}
+.card-value {font-size:25px;font-weight:800;color:#0f172a;line-height:1.15;white-space:nowrap;}
+.card-sub {font-size:12px;color:#64748b;margin-top:4px;display:flex;flex-direction:column;gap:3px;}
+.card-delta {font-size:14px;font-weight:800;}
+.card-badge {display:inline-block;width:fit-content;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.02em;}
+.insight {background:#fff;border-left:5px solid #1f4e78;padding:14px 16px;border-radius:10px;margin-bottom:10px;}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<div class="hero">
+  <h1>PBOS Business Planning Operating System</h1>
+  <p>Enterprise Scenario Intelligence Platform powered by Dashboard Data + Strategy Drivers</p>
+</div>
+""", unsafe_allow_html=True)
+
+with st.sidebar:
+    st.header("Scenario Drivers")
+    rev_default = driver_value(drivers, "REV_TARGET") or kpi_value(dash, "Revenue") or 75_000_000
+    asp_default = driver_value(drivers, "ASP_KG") or 240
+    bird_default = driver_value(drivers, "BIRD_RATE") or 120
+    yield_default = driver_value(drivers, "YIELD") or 0.73
+    cap_default = driver_value(drivers, "CAPACITY_MT") or 75
+    mkt_default = driver_value(drivers, "MKT_PCT") or 0.06
+    wc_days_default = driver_value(drivers, "INV_DAYS") or 35
+
+    revenue_target = st.number_input("Revenue Target (₹)", value=float(rev_default), step=5_000_000.0, format="%.0f")
+    bird_rate = st.number_input("Live Bird Rate (₹/kg)", value=float(bird_default), step=1.0)
+    yield_pct = st.slider("Planning Yield %", min_value=0.50, max_value=0.90, value=float(yield_default), step=0.01, format="%.2f")
+    plant_capacity = st.number_input("Plant Capacity (MT/month)", value=float(cap_default), step=5.0)
+    marketing_pct = st.slider("Marketing % of Revenue", min_value=0.00, max_value=0.15, value=float(mkt_default), step=0.005, format="%.3f")
+    inventory_days = st.number_input("Inventory Days", value=float(wc_days_default), step=1.0)
+    run = st.button("Run Scenario", type="primary", use_container_width=True)
+
+rev_cur = kpi_value(dash, "EXE001") or kpi_value(dash, "Revenue") or kpi_value(dash, "Annual Revenue") or 60_000_000
+eb_cur = kpi_value(dash, "EXE003") or kpi_value(dash, "EBITDA") or 5_224_000
+pat_cur = kpi_value(dash, "EXE004") or kpi_value(dash, "PAT") or 1_443_000
+gc_cur = kpi_value(dash, "EXE002") or kpi_value(dash, "Gross Contribution") or 16_324_000
+wc_cur = kpi_value(dash, "EXE007") or kpi_value(dash, "Working Capital Requirement") or kpi_value(dash, "Total Funding Requirement") or 829_306_914
+birds_cur = kpi_value(dash, "EXE009") or kpi_value(dash, "Birds / Day") or 356
+capex_cur = kpi_value(dash, "EXE012") or kpi_value(dash, "Total CAPEX") or 30_450_000
+opex_cur = kpi_value(dash, "EXE013") or kpi_value(dash, "Total OPEX") or 20_400_000
+emp_cur = normalize_hc(kpi_value(dash, "EXE011") or kpi_value(dash, "Total Employees") or 923)
+capacity_cur = kpi_value(dash, "EXE010") or kpi_value(dash, "Plant Capacity MT / Month") or 50
+bird_rate_cur = driver_value(drivers, "BIRD_RATE", "Current") or 115
+yield_cur = driver_value(drivers, "YIELD", "Current") or 0.72
+
+ratio = revenue_target / rev_cur if rev_cur else 1
+bird_cost_pressure = bird_rate / bird_rate_cur if bird_rate_cur else 1
+yield_benefit = yield_cur / yield_pct if yield_pct else 1
+
+rev_scn = revenue_target
+birds_scn = birds_cur * ratio * yield_benefit
+capacity_need = (rev_scn / asp_default) / 1000 / 12 if asp_default else 0
+capacity_util = capacity_need / plant_capacity if plant_capacity else 0
+wc_scn = wc_cur * ratio * (inventory_days / 35)
+gc_margin = gc_cur / rev_cur if rev_cur else 0.27
+gc_scn = rev_scn * gc_margin * (1 + max(0, yield_pct-yield_cur))
+opex_scn = opex_cur * (ratio ** 0.85) + (rev_scn * max(0, marketing_pct - 0.05))
+ebitda_scn = gc_scn - opex_scn - (rev_scn * 0.02 * (bird_cost_pressure - 1))
+pat_ratio = pat_cur / eb_cur if eb_cur else 0.28
+pat_scn = max(0, ebitda_scn * pat_ratio)
+capex_scn = capex_cur + (11_500_000 if capacity_util > 0.90 else 0)
+emp_scn = normalize_hc(emp_cur * ratio * (1 - 0.12))
+
+metrics = [
+    ("💰 Revenue", rev_cur, rev_scn, "₹"),
+    ("📈 Gross Contribution", gc_cur, gc_scn, "₹"),
+    ("🏦 EBITDA", eb_cur, ebitda_scn, "₹"),
+    ("✅ PAT", pat_cur, pat_scn, "₹"),
+    ("💵 Working Capital Requirement", wc_cur, wc_scn, "₹"),
+    ("🐔 Bird Requirement", birds_cur, birds_scn, "Birds/day"),
+    ("🏭 Available Plant Capacity", capacity_cur, plant_capacity, "MT/month"),
+    ("🏗️ CAPEX", capex_cur, capex_scn, "₹"),
+    ("⚙️ OPEX", opex_cur, opex_scn, "₹"),
+    ("👥 Automation-adjusted HC", emp_cur, emp_scn, "HC"),
+]
+
+dependency_registry = load_dependency_registry()
+changed_driver_ids = []
+changed_driver_values = []
+for driver_id, scenario_value in [("REV_TARGET", revenue_target), ("BIRD_RATE", bird_rate), ("YIELD", yield_pct), ("CAPACITY_MT", plant_capacity), ("MKT_PCT", marketing_pct), ("INV_DAYS", inventory_days)]:
+    current_value = driver_value(drivers, driver_id, "Current")
+    if current_value is None or scenario_value is None:
+        continue
+    if abs(float(scenario_value) - float(current_value)) > 1e-9:
+        changed_driver_ids.append(driver_id)
+        changed_driver_values.append((driver_id, current_value, scenario_value))
+
+if not dependency_registry.empty and changed_driver_values:
+    st.markdown("---")
+    st.subheader("Business Dependency Intelligence")
+    rows = []
+    for driver_id, current_value, scenario_value in changed_driver_values:
+        relevant = dependency_registry[dependency_registry["driver_id"].astype(str) == driver_id]
+        for _, row in relevant.iterrows():
+            rows.append({
+                "Changed Driver": row.get("driver_name", driver_id),
+                "Current": current_value,
+                "Scenario": scenario_value,
+                "Affected KPIs": row.get("affected_kpi_name", ""),
+                "Relationship Type": row.get("relationship_type", ""),
+                "Business Reason": row.get("business_reason", ""),
+            })
+    if rows:
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+st.subheader("Executive KPIs")
+cols = st.columns(5)
+for i, (name, cur, scn, unit) in enumerate(metrics):
+    delta = scn - cur
+    delta_pct = None if cur in (None, 0) else ((scn - cur) / cur) * 100
+    if "Working Capital" in name:
+        status = "Needs Funding"
+        status_color = "#dc2626" if delta > 0 else "#16a34a"
+    elif "Bird" in name:
+        status = "Procurement Increase"
+        status_color = "#f59e0b" if delta > 0 else "#16a34a"
+    elif "Capacity" in name:
+        status = "Expansion Ready"
+        status_color = "#16a34a" if delta > 0 else "#f59e0b"
+    elif "CAPEX" in name:
+        status = "Capacity Investment"
+        status_color = "#f59e0b" if delta > 0 else "#16a34a"
+    elif "OPEX" in name:
+        status = "Cost Pressure"
+        status_color = "#dc2626" if delta > 0 else "#16a34a"
+    elif "Automation-adjusted HC" in name:
+        status = "Efficiency Gain"
+        status_color = "#16a34a" if delta < 0 else "#f59e0b"
+    else:
+        status = "Growing" if delta > 0 else "Softening"
+        status_color = "#16a34a" if delta > 0 else "#f59e0b"
+    arrow = "▲" if (delta_pct or 0) >= 0 else "▼"
+    delta_text = "—" if delta_pct is None else f"{arrow}{abs(delta_pct):.0f}%"
+    with cols[i % 5]:
+        st.markdown(f"""
+        <div class="card">
+          <div class="card-title">{name}</div>
+          <div class="card-value">{fmt(scn, unit)}</div>
+          <div class="card-sub">
+            <div><b>Current:</b> {fmt(cur, unit)}</div>
+            <div class="card-delta" style="color:{'#16a34a' if delta >= 0 else '#dc2626'};">{delta_text}</div>
+            <div class="card-badge" style="background:{status_color}20;color:{status_color};">{status}</div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+st.markdown("---")
+left, right = st.columns([1.15, 0.85])
+
+with left:
+    st.subheader("Business Impact: Current vs Scenario")
+    comp = pd.DataFrame(metrics, columns=["KPI", "Current", "Scenario", "Unit"])
+    comp["KPI"] = comp["KPI"].str.replace("💰 ","").str.replace("📈 ","").str.replace("🏦 ","").str.replace("✅ ","").str.replace("💵 ","").str.replace("🐔 ","").str.replace("🏭 ","").str.replace("🏗️ ","").str.replace("⚙️ ","").str.replace("👥 ","")
+    comp_long = comp.melt(id_vars=["KPI", "Unit"], value_vars=["Current", "Scenario"], var_name="Plan", value_name="Value")
+    fig = px.bar(
+        comp_long[comp_long["KPI"].isin(["Revenue", "EBITDA", "PAT", "Working Capital", "CAPEX", "OPEX"])],
+        x="KPI", y="Value", color="Plan", barmode="group", height=410
+    )
+    fig.update_layout(margin=dict(l=10, r=10, t=30, b=10), legend_title_text="")
+    st.plotly_chart(fig, use_container_width=True)
+
+with right:
+    st.subheader("Five-Year Revenue Roadmap")
+    fy_row = dash[dash["KPI ID"].astype(str).eq("FY001")]
+    if not fy_row.empty:
+        values = [parse_num(fy_row.iloc[0].get(y)) for y in ["FY2027", "FY2028", "FY2029", "FY2030", "FY2031"]]
+    else:
+        values = [60_000_000, 75_000_000, 95_000_000, 120_000_000, 150_000_000]
+    road = pd.DataFrame({"Year": ["FY2027", "FY2028", "FY2029", "FY2030", "FY2031"], "Revenue": values})
+    fig2 = px.line(road, x="Year", y="Revenue", markers=True, height=410)
+    fig2.update_layout(margin=dict(l=10, r=10, t=30, b=10))
+    st.plotly_chart(fig2, use_container_width=True)
+
+st.markdown("---")
+col_a, col_b = st.columns([0.58, 0.42])
+
+with col_a:
+    st.subheader("CEO KPI Table")
+    table = pd.DataFrame({
+        "KPI": [m[0] for m in metrics],
+        "Current": [fmt(m[1], m[3]) for m in metrics],
+        "Scenario": [fmt(m[2], m[3]) for m in metrics],
+        "Delta": [fmt(m[2]-m[1], m[3]) for m in metrics],
+        "Signal": ["Expansion Risk" if m[0].endswith("CAPEX") and capacity_util>0.90 else ("Improves" if m[2] >= m[1] else "Weakens") for m in metrics]
+    })
+    st.dataframe(table, use_container_width=True, hide_index=True)
+
+with col_b:
+    st.subheader("PBOS AI Advisor")
+    wc_delta = wc_scn - wc_cur
+    rev_delta = rev_scn - rev_cur
+    ebitda_delta = ebitda_scn - eb_cur
+    cap_msg = "Expansion CAPEX is triggered because utilization crosses 90%." if capacity_util > 0.90 else "No immediate expansion CAPEX is triggered."
+    st.markdown(f"""
+    <div class="insight"><b>Revenue impact:</b> Revenue moves by {money(rev_delta)} to {money(rev_scn)}.</div>
+    <div class="insight"><b>Operations impact:</b> Bird requirement moves to {fmt(birds_scn, 'Birds/day')}. Capacity utilization is {capacity_util*100:.1f}%.</div>
+    <div class="insight"><b>Cash impact:</b> Working capital changes by {money(wc_delta)}.</div>
+    <div class="insight"><b>Profitability impact:</b> EBITDA changes by {money(ebitda_delta)}.</div>
+    <div class="insight"><b>Recommendation:</b> {cap_msg} Keep procurement and working capital under weekly review.</div>
+    """, unsafe_allow_html=True)
+
+st.markdown("---")
+with st.expander("Raw Dashboard Data", expanded=False):
+    st.dataframe(dash, use_container_width=True)
+with st.expander("Strategy Drivers", expanded=False):
+    st.dataframe(drivers, use_container_width=True)

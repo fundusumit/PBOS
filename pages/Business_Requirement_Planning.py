@@ -1,0 +1,2350 @@
+﻿import math
+import os
+import sys
+from datetime import date
+import pandas as pd
+import streamlit as st
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from calculation_engine import align_manpower_sales, build_channel_sales_output, build_contract_pricing_output, build_distributor_output, build_explainability, build_financial_chain, build_logistics_output, build_order_capacity_intelligence, build_plant_planning
+
+st.set_page_config(page_title="Business Requirement Planning", layout="wide")
+
+st.markdown("""
+<style>
+.pbos-page-header {
+    background: linear-gradient(135deg, #0f2340 0%, #162c4d 100%);
+    border-radius: 18px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 8px 24px rgba(15, 35, 64, 0.16);
+}
+.pbos-page-title {
+    font-size: 1.7rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0 0 4px 0;
+    line-height: 1.15;
+}
+.pbos-page-subtitle {
+    font-size: 0.95rem;
+    color: #c8d2e0;
+    margin: 0;
+    line-height: 1.4;
+}
+.pbos-section-card {
+    background: #ffffff;
+    border: 1px solid #e6ebf2;
+    border-radius: 16px;
+    padding: 16px 16px 14px;
+    box-shadow: 0 6px 18px rgba(15, 35, 64, 0.06);
+    margin-bottom: 16px;
+}
+.pbos-section-title {
+    font-size: 1.04rem;
+    font-weight: 700;
+    color: #12324d;
+    margin-bottom: 3px;
+}
+.pbos-section-subtitle {
+    font-size: 0.84rem;
+    color: #5f6f7f;
+    margin-bottom: 10px;
+}
+.pbos-kpi-card {
+    background: #ffffff;
+    border: 1px solid #dbe3ee;
+    border-radius: 14px;
+    padding: 16px;
+    min-height: 120px;
+    height: auto;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 6px;
+    overflow: visible;
+    box-sizing: border-box;
+}
+.pbos-kpi-icon {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: #eaf2ff;
+    color: #1d4ed8;
+    font-size: 0.95rem;
+}
+.pbos-kpi-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: normal;
+}
+.pbos-kpi-value {
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1.15;
+    color: #0f172a;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+.pbos-kpi-subtitle {
+    font-size: 12px;
+    color: #64748b;
+    white-space: normal;
+}
+.pbos-value-negative {
+    color: #c2410c;
+}
+.pbos-status-badge {
+    display: inline-block;
+    width: fit-content;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 600;
+}
+.pbos-status-positive {
+    background: #e7f7ec;
+    color: #1c7b3f;
+}
+.pbos-status-warn {
+    background: #fff4e5;
+    color: #a16207;
+}
+.pbos-status-alert {
+    background: #fde8e8;
+    color: #b91c1c;
+}
+.pbos-status-neutral {
+    background: #eef2f7;
+    color: #4b5563;
+}
+.pbos-info-banner {
+    background: #eef6ff;
+    border: 1px solid #dbeafe;
+    color: #1d4ed8;
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-size: 0.84rem;
+    margin-top: 8px;
+}
+.pbos-kpi-card .stButton > button {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid #dbe5ee;
+    background: #ffffff;
+    color: #23415c;
+    font-size: 0.8rem;
+    padding: 6px 10px;
+}
+.pbos-kpi-card .stButton > button:hover {
+    border-color: #a6c1e4;
+    background: #f6faff;
+}
+@media (max-width: 900px) {
+    .pbos-page-header {
+        padding: 15px 16px;
+    }
+    .pbos-page-title {
+        font-size: 1.35rem;
+    }
+    .pbos-kpi-card {
+        min-height: auto;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<div class="pbos-page-header">
+  <div class="pbos-page-title">PBOS Business Requirement Planning</div>
+  <div class="pbos-page-subtitle">Revenue-to-resource planning across procurement, plant, manpower, logistics, distribution, channels, EBITDA and PAT.</div>
+</div>
+""", unsafe_allow_html=True)
+
+
+def fmt_currency(value):
+    if value is None:
+        return "—"
+    sign = "-" if value < 0 else ""
+    abs_value = abs(value)
+    if abs_value < 10_000_000:
+        return f"{sign}₹{abs_value/100_000:.0f} L"
+    return f"{sign}₹{abs_value/10_000_000:.2f} Cr"
+
+
+def fmt_volume(value):
+    return f"{value:,.1f} MT/day"
+
+
+def fmt_birds(value, period="day"):
+    suffix = "birds/day" if period == "day" else "birds/month"
+    return f"{value:,.0f} {suffix}"
+
+
+def fmt_rate_per_kg(value):
+    sign = "-" if value < 0 else ""
+    return f"{sign}₹{abs(value):,.0f}/kg"
+
+
+def fmt_currency_plain(value, decimals=0):
+    sign = "-" if value < 0 else ""
+    return f"{sign}₹{abs(value):,.{decimals}f}"
+
+
+def validate_required_keys(output, required_keys, context):
+    missing = [key for key in required_keys if key not in output]
+    if missing:
+        st.error(f"{context} output contract is missing: {', '.join(missing)}")
+        st.stop()
+
+
+def show_employees_popup():
+    st.info("Use the Manpower Planning KPI cards for role responsibilities, risk impact, and CEO recommendations.")
+
+
+def utilization_status(utilization_pct):
+    if utilization_pct < 70:
+        return "Green"
+    if utilization_pct <= 85:
+        return "Healthy"
+    return "Expansion Planning"
+
+
+def render_plant_drilldown(kpi_name):
+    finished_goods_day = plant_capacity_output["finished_goods_mt_day"]
+    capacity_per_line = plant_capacity_output["capacity_per_line_mt_day"]
+    installed_capacity = plant_capacity_output["installed_capacity_mt_day"]
+    lines_required = plant_capacity_output["production_lines_required"]
+    utilization_pct = plant_capacity_output["plant_utilization_pct"]
+    shifts_required = plant_capacity_output["shifts_required"]
+    cold_storage_required = plant_capacity_output["cold_storage_required_mt"]
+    buffer_days = plant_capacity_output["cold_storage_buffer_days"]
+    threshold_pct = plant_capacity_output["utilization_threshold_pct"]
+    unused_capacity = plant_capacity_output["unused_capacity_mt_day"]
+    expansion_required = plant_capacity_output["expansion_required"]
+
+    if kpi_name == "Finished Goods / Day":
+        st.write(f"Current revenue demand converts into {finished_goods_day:,.1f} MT of finished goods per day.")
+        st.write("This is the manufacturing demand anchor for plant capacity, production line, shift, and cold storage decisions.")
+        st.write(f"At {capacity_per_line:,.1f} MT per line per day, the plant needs {lines_required:,.0f} production line(s) to serve this demand.")
+        return
+
+    if kpi_name == "Installed Capacity / Day":
+        st.write(f"The current plan installs {installed_capacity:,.1f} MT/day of manufacturing capacity.")
+        st.write(f"That comes from {lines_required:,.0f} production line(s), each planned at {capacity_per_line:,.1f} MT/day.")
+        st.write(f"Demand uses {utilization_pct:,.1f}% of this capacity, leaving {unused_capacity:,.1f} MT/day as operating flexibility.")
+        return
+
+    if kpi_name == "Production Lines":
+        st.write("Production Lines")
+        st.write("Why?")
+        st.write(f"The revenue target creates {finished_goods_day:,.1f} MT/day of finished goods demand.")
+        st.write(f"With each line planned at {capacity_per_line:,.1f} MT/day, the business needs {lines_required:,.0f} production line(s).")
+        st.write("Sensitivity")
+        st.write("If capacity per line increases, required lines decrease.")
+        st.write("If revenue doubles, finished goods demand rises and required lines increase.")
+        return
+
+    if kpi_name == "Shift Requirement":
+        st.write(f"Current demand requires {shifts_required:,.0f} shift(s) within a maximum operating envelope of {plant_capacity_output['max_shifts']:,.0f} shift(s).")
+        st.write(f"Each shift is planned at {plant_capacity_output['working_hours_per_shift']:,.0f} working hours.")
+        st.write("Higher utilization pushes the plant toward more shifts before new lines are added.")
+        return
+
+    if kpi_name == "Plant Utilization %":
+        st.write(f"Installed Capacity: {installed_capacity:,.1f} MT/day")
+        st.write(f"Finished Goods Demand: {finished_goods_day:,.1f} MT/day")
+        st.write(f"Unused Capacity: {unused_capacity:,.1f} MT/day")
+        st.write("Business Interpretation")
+        st.write("Green: below 70% utilization.")
+        st.write("Healthy: 70-85% utilization.")
+        st.write("Expansion Planning: above 85% utilization.")
+        st.write(f"Current status: {utilization_status(utilization_pct)}.")
+        return
+
+    if kpi_name == "Cold Storage Required":
+        st.write(f"Finished Goods: {finished_goods_day:,.1f} MT/day")
+        st.write(f"Buffer Days: {buffer_days:,.1f}")
+        st.write(f"Storage Needed: {cold_storage_required:,.1f} MT")
+        st.write("Business Meaning")
+        st.write("A 3-day inventory buffer protects supply continuity.")
+        return
+
+    if kpi_name == "Expansion Required":
+        st.write(f"Current Utilization: {utilization_pct:,.1f}%")
+        st.write(f"Threshold: {threshold_pct:,.1f}%")
+        st.write(f"Expansion Required: {expansion_required}")
+        if expansion_required == "Yes":
+            st.write("Recommended Action")
+            st.write("Crossing the threshold means maintenance flexibility reduces and expansion planning should begin.")
+            st.write("Examples")
+            st.write("Add shift. Add line. Expand plant.")
+        else:
+            st.write("Recommended Action")
+            st.write("Continue monitoring utilization before committing expansion capital.")
+
+
+def show_plant_drilldown(kpi_name):
+    if hasattr(st, "dialog"):
+        @st.dialog(kpi_name)
+        def _plant_dialog():
+            render_plant_drilldown(kpi_name)
+
+        _plant_dialog()
+    else:
+        with st.expander(kpi_name, expanded=True):
+            render_plant_drilldown(kpi_name)
+
+
+KPI_ICONS = {
+    "corporate_revenue": "💰",
+    "corporate_birds_day": "🐔",
+    "corporate_capacity": "🏭",
+    "corporate_manpower": "👥",
+    "total_commercial_revenue": "💼",
+    "sales_manager": "🧑‍💼",
+    "general_trade": "🏪",
+    "modern_trade": "🏬",
+    "quick_commerce": "⚡",
+    "ecommerce": "🛒",
+    "exports": "🌍",
+    "horeca": "🍽️",
+    "institutional_government": "🏛️",
+    "selected_market": "📍",
+    "revenue_allocation": "💰",
+    "assigned_plant": "🏭",
+    "market_status": "🧭",
+    "frozen_raw_business": "❄️",
+    "rte_business": "📦",
+    "shared_distribution_network": "🔗",
+    "finished_goods_day": "📦",
+    "installed_capacity_day": "🏭",
+    "production_lines": "⚙️",
+    "shift_requirement": "🕒",
+    "plant_utilization": "📈",
+    "cold_storage": "❄️",
+    "expansion_required": "🚧",
+    "live_bird_rate": "🐔",
+    "yield": "⚖️",
+    "birds_day": "🐔",
+    "live_weight_day": "⚖️",
+    "procurement_spend": "💳",
+    "traders_required": "🤝",
+    "farms_required": "🌾",
+    "primary_vehicles": "🚛",
+    "primary_trips": "🔄",
+    "primary_cost": "💸",
+    "secondary_vehicles": "🚚",
+    "secondary_trips": "🔁",
+    "secondary_cost": "💸",
+    "cold_chain_required": "❄️",
+    "production_hc": "👷",
+    "warehouse_hc": "📦",
+    "sales_hc": "🧑‍💼",
+    "marketing_hc": "📣",
+    "finance_hc": "🧾",
+    "hr_hc": "👥",
+    "admin_hc": "🗂️",
+    "qa_hc": "✅",
+    "procurement_hc": "🤝",
+    "total_employees": "👥",
+    "revenue": "💰",
+    "gross_contribution": "📊",
+    "ebitda": "📈",
+    "pat": "🏁",
+    "planned_demand": "🎯",
+    "scenario_orders": "🧾",
+    "achievement": "📊",
+    "capacity_gap": "⚠️",
+    "capacity_status": "🚦",
+    "scenario_mode": "🧭",
+    "order_source": "🧾",
+    "available_inventory": "📦",
+    "available_plant_capacity": "🏭",
+    "scenario_plant_utilization": "📈",
+    "market_distance": "📍",
+}
+
+PLANT_ICON_KEYS = {
+    "Finished Goods / Day": "finished_goods_day",
+    "Installed Capacity / Day": "installed_capacity_day",
+    "Production Lines": "production_lines",
+    "Shift Requirement": "shift_requirement",
+    "Plant Utilization %": "plant_utilization",
+    "Cold Storage Required": "cold_storage",
+    "Expansion Required": "expansion_required",
+}
+
+MANPOWER_ICON_KEYS = {
+    "Production": "production_hc",
+    "Warehouse + Cold Room": "warehouse_hc",
+    "Sales": "sales_hc",
+    "Marketing": "marketing_hc",
+    "Finance": "finance_hc",
+    "HR": "hr_hc",
+    "Admin": "admin_hc",
+    "QA / Food Safety": "qa_hc",
+    "Procurement": "procurement_hc",
+    "Total Employees": "total_employees",
+}
+
+LOGISTICS_ICON_KEYS = {
+    "Primary Vehicles Required": "primary_vehicles",
+    "Primary Trips / Day": "primary_trips",
+    "Primary Cost / Month": "primary_cost",
+    "Secondary Vehicles Required": "secondary_vehicles",
+    "Secondary Trips / Day": "secondary_trips",
+    "Secondary Cost / Month": "secondary_cost",
+    "Cold Chain Required": "cold_chain_required",
+    "Average Primary Distance": "market_distance",
+    "Market Distance": "market_distance",
+}
+
+DISTRIBUTION_ICON_KEYS = {
+    "Frozen Raw Business": "frozen_raw_business",
+    "RTE Business": "rte_business",
+    "Shared Frozen + RTE Network": "shared_distribution_network",
+}
+
+
+def render_kpi_card(title, value, subtitle=None, status=None, status_type=None, button_label=None, key=None, button_action=None, icon_key=None, value_class=None):
+    icon = KPI_ICONS.get(icon_key, "📌")
+    badge_html = ""
+    if status:
+        badge_class = f"pbos-status-badge {status_type or 'pbos-status-neutral'}"
+        badge_html = f"<div class='{badge_class}'>{status}</div>"
+    subtitle_html = f"<div class='pbos-kpi-subtitle'>{subtitle}</div>" if subtitle else ""
+    value_class_name = f" pbos-value-negative" if value_class == "negative" else ""
+    card_html = (
+        f"<div class='pbos-kpi-card'>"
+        f"<div class='pbos-kpi-icon'>{icon}</div>"
+        f"<div class='pbos-kpi-title'>{title}</div>"
+        f"<div class='pbos-kpi-value{value_class_name}'>{value}</div>"
+        f"{subtitle_html}"
+        f"{badge_html}"
+        f"</div>"
+    )
+    st.markdown(card_html, unsafe_allow_html=True)
+    if button_label and key:
+        if st.button(button_label, key=key):
+            if button_action:
+                button_action()
+
+
+def plant_kpi_card(label, value, key, subtitle=None, status=None, status_type=None):
+    render_kpi_card(label, value, subtitle=subtitle, status=status, status_type=status_type, button_label="View details", key=key, button_action=lambda: show_plant_drilldown(label), icon_key=PLANT_ICON_KEYS.get(label))
+
+
+def render_manpower_drilldown(kpi_name):
+    role_key = {
+        "Production": "production",
+        "Warehouse + Cold Room": "warehouse",
+        "Sales": "sales",
+        "Marketing": "marketing",
+        "Finance": "finance",
+        "HR": "hr",
+        "Admin": "admin",
+        "QA / Food Safety": "qa_food_safety",
+        "Procurement": "procurement",
+        "Total Employees": "total_employees",
+    }[kpi_name]
+    headcount = manpower_output[role_key]
+    finished_goods_day = manpower_output["finished_goods_mt_day"]
+    lines = manpower_output["production_lines"]
+    stage_name = manpower_output["business_stage"]
+    model_name = manpower_output["operating_model"]
+    role_splits = manpower_output.get("role_splits", {})
+
+    st.markdown("**What This Team Does**")
+    if kpi_name == "Production":
+        st.write("Runs processing, packing, cleaning, sanitation, and shift control for daily finished goods output.")
+    elif kpi_name == "Warehouse + Cold Room":
+        st.write("Handles inbound finished goods, cold room inventory discipline, FEFO rotation, and dispatch loading.")
+    elif kpi_name == "Sales":
+        st.write("Builds channel coverage through GT reps, account managers, HoReCa coverage, institutional/export support, and sales coordination.")
+    elif kpi_name == "Marketing":
+        st.write("Owns brand activation, POSM, digital campaigns, trade promotions, and product launch support.")
+    elif kpi_name == "Finance":
+        st.write("Controls collections, vendor payments, GST, MIS, banking, and financial discipline.")
+    elif kpi_name == "HR":
+        st.write("Covers plant hiring, attendance, payroll, compliance, recruitment, and contractor coordination.")
+    elif kpi_name == "Admin":
+        st.write("Coordinates security, housekeeping, utilities, vendor support, AMC follow-up, and office support.")
+    elif kpi_name == "QA / Food Safety":
+        st.write("Protects hygiene, HACCP discipline, process checks, complaint handling, and audit readiness.")
+    elif kpi_name == "Procurement":
+        st.write("Coordinates live bird traders, daily lifting plans, price negotiation, and supplier follow-up.")
+    else:
+        st.write("Shows the total operating team required to support production, cold chain handling, commercial execution, controls, QA, and procurement.")
+
+    st.markdown("**Why This Headcount Is Needed**")
+    st.write(f"{headcount:,.0f} employees are planned for {kpi_name} to support {finished_goods_day:,.1f} MT/day, {lines:,.0f} production line(s), the {model_name} operating model, and the {stage_name} stage.")
+
+    st.markdown("**Role Split**")
+    split_rows = role_splits.get(role_key, [])
+    if split_rows:
+        st.dataframe(pd.DataFrame(split_rows), hide_index=True, use_container_width=True)
+    else:
+        st.dataframe(pd.DataFrame([
+            {"role": "Total operating team", "responsibility": "Combined headcount across all functions.", "headcount": headcount}
+        ]), hide_index=True, use_container_width=True)
+
+    st.markdown("**What Happens If Reduced**")
+    if kpi_name == "Production":
+        st.write("Lower production staffing reduces throughput, increases overtime risk, and weakens cleaning and sanitation discipline.")
+    elif kpi_name == "Warehouse + Cold Room":
+        st.write("Lower warehouse staffing creates loading delays, cold room mismatch risk, FEFO/inventory errors, and dispatch SLA risk.")
+    elif kpi_name == "Sales":
+        st.write("Lower sales staffing reduces market coverage, slows GT expansion, lowers outlet visits, and puts revenue at risk.")
+    elif kpi_name == "Marketing":
+        st.write("Lower marketing staffing weakens launch support, trade promotion execution, and in-market brand visibility.")
+    elif kpi_name == "Finance":
+        st.write("Lower finance staffing slows collections, vendor payments, compliance, MIS, and banking follow-up.")
+    elif kpi_name == "HR":
+        st.write("Lower HR staffing weakens hiring speed, attendance control, payroll coordination, and compliance tracking.")
+    elif kpi_name == "Admin":
+        st.write("Lower admin staffing increases site upkeep, vendor, utilities, and office support risk.")
+    elif kpi_name == "QA / Food Safety":
+        st.write("Lower QA staffing increases hygiene, food safety, audit, and customer complaint risk.")
+    elif kpi_name == "Procurement":
+        st.write("Lower procurement staffing weakens trader coordination, daily lifting planning, price tracking, and supplier follow-up.")
+    else:
+        st.write("Reducing total headcount without changing the operating plan creates execution risk across service, quality, and revenue coverage.")
+
+    st.markdown("**CEO Recommendation**")
+    if kpi_name == "Total Employees":
+        st.write("Treat total employees as an execution capacity decision. Reduce only after lowering revenue ambition, simplifying channels, or improving productivity.")
+    else:
+        st.write(f"Keep {kpi_name} at the planned level unless the revenue target, channel coverage, or plant operating plan is reduced.")
+
+    st.markdown("**Planning Assumptions**")
+    st.write(f"Finished goods/day: {finished_goods_day:,.1f} MT. Production lines: {lines:,.0f}. Operating model: {model_name}. Business stage: {stage_name}.")
+
+
+def show_manpower_drilldown(kpi_name):
+    if hasattr(st, "dialog"):
+        @st.dialog(kpi_name)
+        def _manpower_dialog():
+            render_manpower_drilldown(kpi_name)
+
+        _manpower_dialog()
+    else:
+        with st.expander(kpi_name, expanded=True):
+            render_manpower_drilldown(kpi_name)
+
+
+def manpower_kpi_card(label, value, key, subtitle=None, status=None, status_type=None):
+    render_kpi_card(label, f"{value:,.0f}", subtitle=subtitle, status=status, status_type=status_type, button_label="View details", key=key, button_action=lambda: show_manpower_drilldown(label), icon_key=MANPOWER_ICON_KEYS.get(label))
+
+
+def render_logistics_drilldown(kpi_name):
+    primary = logistics_output["primary"]
+    secondary = logistics_output["secondary"]
+    if kpi_name.startswith("Primary"):
+        st.write("What:")
+        st.write("Vehicles carrying live birds from sourcing points, traders, or farms to the production plant.")
+        st.write("Why:")
+        st.write("Required to ensure uninterrupted daily bird lifting for plant production.")
+        st.write("How calculated:")
+        st.write("Daily live bird weight is matched against vehicle capacity and planned trips per vehicle.")
+        st.dataframe(pd.DataFrame([
+            {"Item": "Plant", "Value": selected_plant_name},
+            {"Item": "Birds/day", "Value": f"{primary['birds_per_day']:,.0f}"},
+            {"Item": "Average bird weight", "Value": f"{primary['average_bird_weight']:,.2f} kg"},
+            {"Item": "Live weight/day", "Value": f"{primary['live_weight_kg_day']:,.0f} kg"},
+            {"Item": "Vehicle capacity", "Value": f"{primary['vehicle_capacity_kg']:,.0f} kg"},
+            {"Item": "Trips/day", "Value": f"{primary['trips_day']:,.0f}"},
+            {"Item": "Vehicles required", "Value": f"{primary['vehicles_required']:,.0f}"},
+            {"Item": "Monthly cost", "Value": fmt_currency(primary["cost_month"])},
+        ]), hide_index=True, use_container_width=True)
+        st.write("Business interpretation:")
+        st.write(f"The {selected_plant_name} requires {primary['vehicles_required']:,.0f} primary vehicle(s) to lift the planned live-bird volume without interrupting production.")
+        return
+
+    if kpi_name.startswith("Secondary") or kpi_name == "Cold Chain Required":
+        st.write("What:")
+        st.write("Vehicles carrying finished goods from the plant to the selected market, distributor, DC, or customer.")
+        st.write("Why:")
+        st.write("Required to maintain daily delivery and cold-chain continuity.")
+        st.dataframe(pd.DataFrame([
+            {"Item": "Selected market", "Value": selected_market_name},
+            {"Item": "Finished goods/day", "Value": f"{secondary['finished_goods_mt_day']:,.1f} MT"},
+            {"Item": "Market distance", "Value": f"{secondary['market_distance_km']:,.0f} km"},
+            {"Item": "Vehicle capacity", "Value": f"{secondary['vehicle_capacity_mt']:,.1f} MT"},
+            {"Item": "Trips/day", "Value": f"{secondary['trips_day']:,.0f}"},
+            {"Item": "Vehicles required", "Value": f"{secondary['vehicles_required']:,.0f}"},
+            {"Item": "Cold-chain requirement", "Value": secondary["cold_chain_required"]},
+            {"Item": "Monthly cost", "Value": fmt_currency(secondary["cost_month"])},
+        ]), hide_index=True, use_container_width=True)
+        st.write("Business interpretation:")
+        st.write(f"{selected_market_name} requires {secondary['vehicles_required']:,.0f} secondary vehicle(s) to support daily finished-goods delivery from {selected_plant_name}.")
+        return
+
+    st.write("Total Logistics Cost / Month")
+    st.write("This combines plant-level primary logistics and selected-market secondary logistics without mixing vehicle requirements.")
+    st.write(f"Primary cost: {fmt_currency(primary['cost_month'])}")
+    st.write(f"Secondary cost: {fmt_currency(secondary['cost_month'])}")
+    st.write(f"Total logistics cost: {fmt_currency(logistics_output['total_logistics_cost_month'])}")
+
+
+def show_logistics_drilldown(kpi_name):
+    if hasattr(st, "dialog"):
+        @st.dialog(kpi_name)
+        def _logistics_dialog():
+            render_logistics_drilldown(kpi_name)
+
+        _logistics_dialog()
+    else:
+        with st.expander(kpi_name, expanded=True):
+            render_logistics_drilldown(kpi_name)
+
+
+def logistics_kpi_card(label, value, key, subtitle=None, status=None, status_type=None):
+    render_kpi_card(label, value, subtitle=subtitle, status=status, status_type=status_type, button_label="View details", key=key, button_action=lambda: show_logistics_drilldown(label), icon_key=LOGISTICS_ICON_KEYS.get(label))
+
+
+def render_order_capacity_drilldown():
+    if not order_capacity_intelligence.get("scenario_active"):
+        st.write("No order scenario has been activated. Select an order scenario to test channel demand, releasable inventory and plant capacity.")
+    else:
+        st.write("Scenario orders are user-entered planning assumptions and are not confirmed ERP purchase orders.")
+
+    st.write(order_capacity_intelligence["business_impact"])
+    st.write(order_capacity_intelligence.get("observation_status", "Scenario persistence is simulated and not yet connected to historical daily order history."))
+    st.write("Channel-wise planned vs scenario orders")
+    channel_rows = []
+    for channel, data in order_capacity_intelligence.get("channel_results", order_capacity_intelligence["channel_planned_vs_actual"]).items():
+        channel_rows.append({
+            "Channel": channel,
+            "Planned Volume MT/day": f"{data.get('planned_volume_mt_day', data['planned_volume_kg'] / 1000.0):,.1f}",
+            "Scenario Orders MT/day": f"{data.get('scenario_order_mt_day', data.get('actual_order_kg', data.get('actual_order_volume_kg', 0.0)) / 1000.0):,.1f}",
+            "Achievement %": f"{data['achievement_pct']:,.1f}%",
+            "Shortfall MT/day": f"{data.get('shortfall_mt_day', data['shortfall_kg'] / 1000.0):,.1f}",
+            "Excess MT/day": f"{data.get('excess_mt_day', data['excess_kg'] / 1000.0):,.1f}",
+            "Status": data.get("status", ""),
+            "Commercial Comment": data.get("commercial_comment", ""),
+        })
+    st.dataframe(pd.DataFrame(channel_rows), hide_index=True, use_container_width=True)
+
+    st.write("Recommendation area")
+    recommendation_rows = []
+    for label, key in [
+        ("Capacity Recommendation", "capacity_recommendations"),
+        ("Marketing / Sales Recommendation", "marketing_recommendations"),
+        ("Procurement Recommendation", "procurement_recommendations"),
+        ("Logistics Recommendation", "logistics_recommendations"),
+        ("Manpower Recommendation", "manpower_recommendations"),
+    ]:
+        recommendation_rows.append({
+            "Area": label,
+            "Recommendation": " ".join(order_capacity_intelligence.get(key, [])),
+        })
+    st.dataframe(pd.DataFrame(recommendation_rows), hide_index=True, use_container_width=True)
+
+    st.write("Inventory impact")
+    inventory = order_capacity_intelligence["inventory_impact"]
+    st.dataframe(pd.DataFrame([
+        {"Item": "Inventory build risk", "Value": f"{inventory['inventory_build_risk_kg']:,.0f} kg"},
+        {"Item": "Days of inventory", "Value": f"{inventory['days_of_inventory']:,.1f}"},
+        {"Item": "Fresh expiry risk", "Value": inventory["fresh_expiry_risk"]},
+        {"Item": "Frozen storage impact", "Value": f"{inventory['frozen_storage_impact']:,.1f} MT"},
+        {"Item": "Stockout risk", "Value": inventory["stockout_risk"]},
+    ]), hide_index=True, use_container_width=True)
+
+    st.write("Line utilization and recommendation hierarchy")
+    st.write(f"Line utilization: {order_capacity_intelligence['scenario_line_utilization_pct']:,.1f}%")
+    for action in order_capacity_intelligence["recommended_actions"]:
+        st.write(f"- {action}")
+
+
+def show_order_capacity_drilldown():
+    if hasattr(st, "dialog"):
+        @st.dialog("Order & Capacity Intelligence")
+        def _order_capacity_dialog():
+            render_order_capacity_drilldown()
+
+        _order_capacity_dialog()
+    else:
+        with st.expander("Order & Capacity Intelligence", expanded=True):
+            render_order_capacity_drilldown()
+
+
+def render_distributor_channel_drilldown(kpi_name):
+    distribution_map = {
+        "Frozen Raw Business": ("Frozen Raw", "frozen_raw_revenue", "frozen_raw_distributors", "frozen_revenue_capacity_per_distributor", "frozen_network_capacity", "frozen_utilization_pct", "frozen_capacity_status"),
+        "RTE Business": ("RTE", "rte_revenue", "rte_distributors", "rte_revenue_capacity_per_distributor", "rte_network_capacity", "rte_utilization_pct", "rte_capacity_status"),
+        "Shared Frozen + RTE Network": ("Shared Frozen + RTE", "shared_frozen_rte_revenue", "shared_frozen_rte_distributors", "shared_frozen_rte_revenue_per_distributor", "shared_network_capacity", "shared_utilization_pct", "shared_frozen_rte_capacity_status"),
+    }
+    if kpi_name in distribution_map:
+        name, revenue_key, count_key, partner_capacity_key, network_capacity_key, utilization_key, status_key = distribution_map[kpi_name]
+        st.write("What this network owns")
+        st.write(f"{name} distribution partners carry the planned business revenue with enough capacity for service frequency, cold-chain discipline, and account follow-up.")
+        st.dataframe(pd.DataFrame([
+            {"Item": "Revenue responsibility", "Value": fmt_currency(distributor_output[revenue_key])},
+            {"Item": "Distribution partners", "Value": f"{distributor_output[count_key]:,.0f}"},
+            {"Item": "Monthly capacity per partner", "Value": fmt_currency(distributor_output[partner_capacity_key])},
+            {"Item": "Monthly network capacity", "Value": fmt_currency(distributor_output[network_capacity_key])},
+            {"Item": "Capacity utilization", "Value": f"{distributor_output[utilization_key]:,.1f}%"},
+            {"Item": "Capacity signal", "Value": distributor_output[status_key]},
+        ]), hide_index=True, use_container_width=True)
+        st.write("What happens if partners are reduced")
+        st.write("The same revenue has to move through fewer partners, which increases service-frequency pressure, cold-chain execution risk, and account follow-up delays.")
+        st.write("CEO recommendation")
+        if distributor_output[status_key] == "Additional Partner Required":
+            st.write("Add a distribution partner before committing the revenue plan.")
+        elif distributor_output[status_key] == "Near Capacity":
+            st.write("Monitor this network closely; it is close to the practical operating limit.")
+        else:
+            st.write("Current partner capacity can support the planned business.")
+        return
+
+    if kpi_name == "GT Sales Executives":
+        gt = channel_sales_output["general_trade"]
+        active_distributors = gt.get("active_distributors")
+        st.write("What this team owns")
+        st.write("General Trade sales executives required to manage distributor-led outlet coverage and beat execution.")
+        st.dataframe(pd.DataFrame([
+            {"Item": "GT revenue", "Value": fmt_currency(gt["revenue"])},
+            {"Item": "Required distributors", "Value": f"{gt['required_distributors']:,.0f}"},
+            {"Item": "Actual active distributors", "Value": "Not Connected" if active_distributors is None else f"{active_distributors:,.0f}"},
+            {"Item": "Distributor gap", "Value": "Not Available" if gt["coverage_gap_distributors"] is None else f"{gt['coverage_gap_distributors']:,.0f}"},
+            {"Item": "Target outlets", "Value": f"{gt['target_outlets']:,.0f}"},
+            {"Item": "Outlets per distributor", "Value": f"{gt['outlets_per_distributor']:,.0f}"},
+            {"Item": "Coverage status", "Value": gt["coverage_status"]},
+            {"Item": "Revenue handled per salesperson", "Value": fmt_currency(gt["revenue_per_sales_executive"])},
+            {"Item": "Outlets handled per salesperson", "Value": f"{gt['outlets_per_sales_executive']:,.0f}"},
+            {"Item": "Sales executives required", "Value": f"{gt['sales_executives']:,.0f}"},
+            {"Item": "Beats", "Value": f"{gt['beats']:,.0f}"},
+            {"Item": "Daily calls required", "Value": f"{gt['calls_day']:,.0f}"},
+            {"Item": "Supported revenue", "Value": fmt_currency(gt["supported_revenue"])},
+            {"Item": "Revenue at risk", "Value": fmt_currency(gt["revenue_at_risk"])},
+        ]), hide_index=True, use_container_width=True)
+        if active_distributors is None:
+            st.write("Actual distributor count is not connected. PBOS is showing the planning requirement.")
+        st.write("CEO recommendation:")
+        st.write("Keep GT field coverage aligned with distributor load, outlet expansion, and daily call discipline.")
+        return
+
+    if kpi_name == "MT KAM":
+        data = channel_sales_output["modern_trade"]
+        st.write("What this role owns")
+        st.write("Modern Trade KAM owns chain negotiation, annual trading terms, listing, promotions, claims, fill rate, store execution, and category reviews.")
+        st.dataframe(pd.DataFrame([
+            {"Item": "MT revenue", "Value": fmt_currency(data["revenue"])},
+            {"Item": "Accounts", "Value": f"{data['accounts']:,.0f}"},
+            {"Item": "KAM required", "Value": f"{data['kam']:,.0f}"},
+        ]), hide_index=True, use_container_width=True)
+        st.write("What happens if headcount is reduced")
+        st.write("Chain negotiation slows, listing execution weakens, claims and promotion closure get delayed, and revenue visibility reduces.")
+        st.write("CEO recommendation:")
+        st.write("Keep separate MT ownership when MT revenue exists; it protects trading terms and store execution.")
+        return
+
+    if kpi_name == "QCom KAM":
+        data = channel_sales_output["quick_commerce"]
+        st.write("What this role owns")
+        st.write("Quick Commerce KAM owns platform relationships, buying accounts, regional buying teams, assortment, replenishment, platform promotions, visibility, SLA adherence, and near-real-time demand planning.")
+        st.dataframe(pd.DataFrame([
+            {"Item": "Active Platforms", "Value": f"{data['active_platforms']:,.0f}"},
+            {"Item": "Buying Accounts", "Value": f"{data['buying_accounts']:,.0f}"},
+            {"Item": "Buying Regions", "Value": f"{data['buying_regions']:,.0f}"},
+            {"Item": "Dark Stores Served", "Value": f"{data['dark_stores_served']:,.0f}"},
+            {"Item": "Monthly Volume kg", "Value": f"{data['monthly_volume_kg']:,.0f}"},
+            {"Item": "Revenue", "Value": fmt_currency(data["revenue"])},
+            {"Item": "Required KAM", "Value": f"{data['required_kam']:,.0f}"},
+            {"Item": "Average Revenue per Platform", "Value": fmt_currency(data["average_revenue_per_platform"])},
+            {"Item": "Average Volume per Platform", "Value": f"{data['average_volume_per_platform']:,.0f} kg"},
+        ]), hide_index=True, use_container_width=True)
+        st.write("What happens if headcount is reduced")
+        st.write("Platform relationship ownership, buying-region follow-up, replenishment speed, stock-out control, and promotion execution weaken.")
+        st.write("CEO recommendation:")
+        st.write("Keep QCom separate from MT when QCom revenue exists; the operating rhythm is different and faster.")
+        return
+
+    if kpi_name == "HoReCa Revenue":
+        data = channel_sales_output["horeca"]
+        st.write("HoReCa Commercial Planning")
+        st.write("HoReCa covers hotels, restaurants, caterers, and cloud kitchens.")
+        st.write("Planned revenue is allocated from the selected market target using the HoReCa channel mix. The system-recommended contract rate determines the monthly volume required to achieve that target.")
+        st.dataframe(pd.DataFrame([
+            {"Item": "Live Bird Rate", "Value": f"{fmt_currency_plain(data['live_bird_rate'], 2)}/kg"},
+            {"Item": "Average Live Bird Weight", "Value": f"{data['average_live_bird_weight_kg']:,.2f} kg"},
+            {"Item": "Dressed Output", "Value": f"{data['dressed_output_kg']:,.2f} kg"},
+            {"Item": "Dressed Yield", "Value": f"{data['dressed_yield_pct'] * 100:,.1f}%"},
+            {"Item": "Raw Material Cost/kg", "Value": f"{fmt_currency_plain(data['raw_material_cost_per_kg'], 2)}/kg"},
+            {"Item": "Processing Cost/kg", "Value": f"{fmt_currency_plain(data['processing_cost_per_kg'], 2)}/kg"},
+            {"Item": "Packaging Cost/kg", "Value": f"{fmt_currency_plain(data['packaging_cost_per_kg'], 2)}/kg"},
+            {"Item": "Cold Chain and Logistics/kg", "Value": f"{fmt_currency_plain(data['cold_chain_logistics_cost_per_kg'], 2)}/kg"},
+            {"Item": "Factory Overhead/kg", "Value": f"{fmt_currency_plain(data['factory_overhead_per_kg'], 2)}/kg"},
+            {"Item": "Total Cost/kg", "Value": f"{fmt_currency_plain(data['total_cost_per_kg'], 2)}/kg"},
+            {"Item": "Target Gross Margin", "Value": f"{data['target_margin_pct']:,.1f}%"},
+            {"Item": "Recommended Selling Price/kg", "Value": f"{fmt_currency_plain(data['recommended_selling_price_per_kg'], 0)}/kg"},
+            {"Item": "Final Contract Rate/kg", "Value": f"{fmt_currency_plain(data['contract_rate_per_kg'], 0)}/kg"},
+            {"Item": "Price Difference", "Value": fmt_currency_plain(data['contract_rate_per_kg'] - data['recommended_selling_price_per_kg'], 0)},
+            {"Item": "Actual Margin %", "Value": f"{data['actual_margin_pct']:,.1f}%"},
+            {"Item": "Pricing Status", "Value": data["pricing_status"]},
+            {"Item": "Required Volume kg/month", "Value": f"{data['required_volume_kg_month']:,.0f}"},
+            {"Item": "Planned Revenue", "Value": fmt_currency(data["planned_revenue"])},
+            {"Item": "Mix Allocation", "Value": fmt_currency(channel_sales_output.get("horeca_mix_allocation", data.get("mix_allocation_revenue", 0.0)))},
+            {"Item": "Planning Revenue", "Value": fmt_currency(data["planned_revenue"])},
+            {"Item": "Difference", "Value": fmt_currency(data["revenue"] - channel_sales_output.get("horeca_mix_allocation", data.get("mix_allocation_revenue", 0.0)))},
+            {"Item": "Active Accounts", "Value": f"{data['accounts']:,.0f}"},
+            {"Item": "Required HoReCa HC", "Value": f"{data['sales_executives']:,.0f}"},
+            {"Item": "Credit Days", "Value": f"{data['credit_days']:,.0f}"},
+        ]), hide_index=True, use_container_width=True)
+        st.write("Contract-rate override will be enabled later through governed commercial approval.")
+        if data["revenue_mode"] != "PLANNING" and abs(data["reconciliation_variance"]) > 0:
+            st.warning(f"Contract revenue differs from channel mix allocation by {fmt_currency(data['reconciliation_variance'])}.")
+        st.write("Required HoReCa HC reflects the number of people needed to manage active hotel, restaurant, caterer, and cloud-kitchen contracts, collections, service levels, and account development.")
+        if data["sales_executives"] == 1:
+            st.write("One HoReCa executive is sufficient at the current contract volume and account load.")
+        st.write("CEO recommendation:")
+        st.write("Use contract mode when volume is backed by negotiated accounts; use mix allocation only for scenario planning.")
+        return
+
+    if kpi_name == "Institutional / Government Revenue":
+        data = channel_sales_output["institutional_government"]
+        st.write("Institutional / Government Commercial Planning")
+        st.write("Institutional / Government covers hospitals, railways, military, defence canteens, government departments, tenders, and rate contracts.")
+        st.write("Planned revenue is allocated from the selected market target using the Institutional/Government mix. The recommended contract rate determines the awarded volume and number of 2 kg packs required.")
+        st.dataframe(pd.DataFrame([
+            {"Item": "Product", "Value": data["product"]},
+            {"Item": "Pack Size", "Value": f"{data['pack_size_kg']:,.0f} kg"},
+            {"Item": "Pack Type", "Value": data["pack_type"]},
+            {"Item": "MRP", "Value": data["mrp"]},
+            {"Item": "Live Bird Rate", "Value": f"{fmt_currency_plain(data['live_bird_rate'], 2)}/kg"},
+            {"Item": "Dressed Yield", "Value": f"{data['dressed_yield_pct'] * 100:,.1f}%"},
+            {"Item": "Raw Material Cost/kg", "Value": f"{fmt_currency_plain(data['raw_material_cost_per_kg'], 2)}/kg"},
+            {"Item": "Processing Cost/kg", "Value": f"{fmt_currency_plain(data['processing_cost_per_kg'], 2)}/kg"},
+            {"Item": "Packaging Cost/kg", "Value": f"{fmt_currency_plain(data['packaging_cost_per_kg'], 2)}/kg"},
+            {"Item": "Cold Chain and Logistics/kg", "Value": f"{fmt_currency_plain(data['cold_chain_logistics_cost_per_kg'], 2)}/kg"},
+            {"Item": "Factory Overhead/kg", "Value": f"{fmt_currency_plain(data['factory_overhead_per_kg'], 2)}/kg"},
+            {"Item": "Total Cost/kg", "Value": f"{fmt_currency_plain(data['total_cost_per_kg'], 2)}/kg"},
+            {"Item": "Target Gross Margin", "Value": f"{data['target_margin_pct']:,.1f}%"},
+            {"Item": "Recommended Selling Price/kg", "Value": f"{fmt_currency_plain(data['recommended_selling_price_per_kg'], 0)}/kg"},
+            {"Item": "Final Contract Rate/kg", "Value": f"{fmt_currency_plain(data['contract_rate_per_kg'], 0)}/kg"},
+            {"Item": "Contract Value per 2 kg Pack", "Value": fmt_currency_plain(data['contract_value_per_pack'], 0)},
+            {"Item": "Actual Margin %", "Value": f"{data['actual_margin_pct']:,.1f}%"},
+            {"Item": "Pricing Status", "Value": data["pricing_status"]},
+            {"Item": "Required Volume kg/month", "Value": f"{data['required_volume_kg_month']:,.0f}"},
+            {"Item": "Required 2 kg Packs/month", "Value": f"{data['required_packs_month']:,.0f}"},
+            {"Item": "Planned Revenue", "Value": fmt_currency(data["planned_revenue"])},
+            {"Item": "Mix Allocation", "Value": fmt_currency(channel_sales_output.get("institutional_mix_allocation", data.get("mix_allocation_revenue", 0.0)))},
+            {"Item": "Planning Revenue", "Value": fmt_currency(data["planned_revenue"])},
+            {"Item": "Difference", "Value": fmt_currency(data["revenue"] - channel_sales_output.get("institutional_mix_allocation", data.get("mix_allocation_revenue", 0.0)))},
+            {"Item": "Active Tenders / Contracts", "Value": f"{data['active_tenders_contracts']:,.0f}"},
+            {"Item": "Required Institutional / Government HC", "Value": f"{data['required_hc']:,.0f}"},
+            {"Item": "Tender / Contract Name", "Value": data["contract_name"]},
+            {"Item": "Contract Start Date", "Value": data["contract_start_date"]},
+            {"Item": "Contract End Date", "Value": data["contract_end_date"]},
+        ]), hide_index=True, use_container_width=True)
+        if data["revenue_mode"] != "PLANNING" and abs(data["reconciliation_variance"]) > 0:
+            st.warning(f"Contract revenue differs from channel mix allocation by {fmt_currency(data['reconciliation_variance'])}.")
+        st.write("Required HC reflects tender tracking, bid submission, rate-contract management, compliance documents, order coordination, payment follow-up, and account servicing.")
+        if data["required_hc"] == 1:
+            st.write("One manager is sufficient for the current tender and contract workload.")
+        st.write("CEO recommendation:")
+        st.write("Keep this as a tender-backed model; Curry Cut 2 kg institutional packs remain locked for governance.")
+        return
+
+    if kpi_name == "HoReCa Sales HC":
+        data = channel_sales_output["horeca"]
+        st.write("What this team owns")
+        st.write("HoReCa sales owns hotels, restaurants, caterers, cloud kitchens, sampling, pricing closure, repeat orders, and payment follow-up.")
+        st.dataframe(pd.DataFrame([
+            {"Item": "HoReCa Planned Revenue", "Value": fmt_currency(data["planned_revenue"])},
+            {"Item": "Active accounts", "Value": f"{data['accounts']:,.0f}"},
+            {"Item": "Required HoReCa HC", "Value": f"{data['sales_executives']:,.0f}"},
+            {"Item": "Revenue handled per HoReCa executive", "Value": fmt_currency(data["revenue_per_sales_executive"])},
+            {"Item": "Contract Rate ₹/kg", "Value": f"{fmt_currency_plain(data['contract_rate_per_kg'], 2)}/kg"},
+            {"Item": "Required Volume kg/month", "Value": f"{data['required_volume_kg_month']:,.0f}"},
+            {"Item": "Credit Days", "Value": f"{data['credit_days']:,.0f}"},
+        ]), hide_index=True, use_container_width=True)
+        st.write("Required HoReCa HC reflects the number of people needed to manage active hotel, restaurant, caterer, and cloud-kitchen contracts, collections, service levels, and account development.")
+        if data["sales_executives"] == 1:
+            st.write("One HoReCa executive is sufficient at the current contract volume and account load.")
+        st.write("CEO recommendation:")
+        st.write("Keep direct ownership where HoReCa revenue exists because acquisition and repeat order building need focused follow-up.")
+        return
+
+    if kpi_name == "Institutional / Government Manager":
+        data = channel_sales_output["institutional_government"]
+        st.write("What this role owns")
+        st.write("Institutional / Government ownership covers hospitals, railways, military, defence canteens, tenders, rate contracts, documentation, and payment follow-up.")
+        st.dataframe(pd.DataFrame([
+            {"Item": "Institutional / Government Planned Revenue", "Value": fmt_currency(data["planned_revenue"])},
+            {"Item": "Active Tenders / Contracts", "Value": f"{data['active_tenders_contracts']:,.0f}"},
+            {"Item": "Required Institutional / Government HC", "Value": f"{data['required_hc']:,.0f}"},
+            {"Item": "Product", "Value": data["product"]},
+            {"Item": "Pack Size", "Value": f"{data['pack_size_kg']:,.0f} kg"},
+            {"Item": "Contract Rate ₹/kg", "Value": f"{fmt_currency_plain(data['contract_rate_per_kg'], 2)}/kg"},
+            {"Item": "Required Volume kg/month", "Value": f"{data['required_volume_kg_month']:,.0f}"},
+            {"Item": "Required 2 kg Packs/month", "Value": f"{data['required_packs_month']:,.0f}"},
+            {"Item": "Tender / Contract Name", "Value": data["contract_name"]},
+            {"Item": "Contract Start Date", "Value": data["contract_start_date"]},
+            {"Item": "Contract End Date", "Value": data["contract_end_date"]},
+        ]), hide_index=True, use_container_width=True)
+        st.write("Required HC reflects tender tracking, bid submission, rate-contract management, compliance documents, order coordination, payment follow-up, and account servicing.")
+        if data["account_managers"] == 1:
+            st.write("One manager is sufficient for the current tender and contract workload.")
+        st.write("CEO recommendation:")
+        st.write("Keep dedicated ownership where institutional revenue exists because tenders and rate contracts need disciplined follow-through.")
+        return
+
+    if kpi_name == "Sales Manager":
+        st.write("Sales organisation hierarchy")
+        st.write("Sales Manager / Head of Sales sits above all commercial verticals and is not treated as a peer salesperson.")
+        st.write(f"Revenue Accountability: {fmt_currency(channel_sales_output.get('selected_market_revenue', selected_market_revenue))}")
+        st.write(f"Headcount: {channel_sales_output['sales_manager']:,.0f}")
+        st.write(f"Total commercial manpower: {channel_sales_output['total_commercial_hc']:,.0f}")
+        st.write(f"Markets supported: {channel_sales_output.get('total_markets_supported', 1):,.0f}")
+        st.write(f"Active accounts supported: {channel_sales_output.get('total_active_accounts_supported', 0):,.0f}")
+        st.write("CEO recommendation:")
+        st.write("Protect the separated ownership structure so each channel has clear accountability and the Sales Manager can govern the full revenue plan.")
+        return
+
+    if kpi_name == "Sales Coordinator / MIS":
+        st.write("What this role owns")
+        st.write("Sales Coordinator / MIS supports all commercial divisions operationally through order coordination, reporting, and admin discipline.")
+        st.dataframe(pd.DataFrame([
+            {"Item": "Total commercial revenue supported", "Value": fmt_currency(channel_sales_output.get("total_commercial_revenue", 0.0))},
+            {"Item": "Total markets supported", "Value": f"{channel_sales_output.get('total_markets_supported', 0):,.0f}"},
+            {"Item": "Total active accounts supported", "Value": f"{channel_sales_output.get('total_active_accounts_supported', 0):,.0f}"},
+            {"Item": "Reporting / order-coordination workload", "Value": "Shared across GT, MT, QCom, HoReCa, and Institutional / Government"},
+            {"Item": "Required HC", "Value": f"{channel_sales_output.get('sales_coordinator_mis', 0):,.0f}"},
+        ]), hide_index=True, use_container_width=True)
+        st.write("Why this role is required")
+        st.write("It supports reporting, order lines, coordination, and governance across the commercial organization.")
+        return
+
+    if kpi_name == "Total Commercial HC":
+        st.write(f"Total commercial manpower: {channel_sales_output['total_commercial_hc']:,.0f}")
+        st.write(f"Total commercial revenue: {fmt_currency(channel_sales_output.get('total_commercial_revenue', 0.0))}")
+        st.write(f"Markets supported: {channel_sales_output.get('total_markets_supported', 1):,.0f}")
+        st.write(f"Active accounts supported: {channel_sales_output.get('total_active_accounts_supported', 0):,.0f}")
+        return
+
+    st.write(f"Total commercial headcount: {channel_sales_output['total_commercial_hc']:,.0f}")
+
+
+def show_distributor_channel_drilldown(kpi_name):
+    dialog_title = {
+        "HoReCa Revenue": "HoReCa Commercial Planning",
+        "Institutional / Government Revenue": "Institutional / Government Commercial Planning",
+    }.get(kpi_name, kpi_name)
+    if hasattr(st, "dialog"):
+        @st.dialog(dialog_title)
+        def _distributor_channel_dialog():
+            render_distributor_channel_drilldown(kpi_name)
+
+        _distributor_channel_dialog()
+    else:
+        with st.expander(dialog_title, expanded=True):
+            render_distributor_channel_drilldown(kpi_name)
+
+
+def distributor_channel_kpi_card(label, value, key, subtitle=None, status=None, status_type=None):
+    render_kpi_card(label, value, subtitle=subtitle, status=status, status_type=status_type, button_label="View details", key=key, button_action=lambda: show_distributor_channel_drilldown(label), icon_key=DISTRIBUTION_ICON_KEYS.get(label, "capacity_status"))
+
+
+def distribution_business_card(label, revenue, partners, network_capacity, utilization_pct, status, key):
+    render_kpi_card(label, fmt_currency(revenue), subtitle=f"Distribution Partners: {partners:,.0f} | Monthly Network Capacity: {fmt_currency(network_capacity)} | Utilization: {utilization_pct:,.1f}%", status=status, status_type="pbos-status-neutral", button_label="View details", key=key, button_action=lambda: show_distributor_channel_drilldown(label), icon_key=DISTRIBUTION_ICON_KEYS.get(label))
+
+
+def as_int(v):
+    try:
+        return int(round(float(v)))
+    except Exception:
+        return 0
+
+
+def as_float(v):
+    try:
+        return float(v)
+    except Exception:
+        return 0.0
+
+
+def _normalize_key(value):
+    return str(value).strip().upper().replace(" ", "_").replace("/", "_").replace("-", "_")
+
+
+def _resolve(raw_values, keys, default=None):
+    for key in keys:
+        if key in raw_values:
+            return raw_values[key]
+    return default
+
+
+def load_assumptions(path):
+    if not os.path.exists(path):
+        return {}
+
+    df = pd.read_csv(path)
+    raw_values = {}
+    for _, row in df.iterrows():
+        assumption_id = str(row.get("assumption_id", "")).strip()
+        parameter = str(row.get("parameter", "")).strip()
+        value = row.get("value", 0)
+        if assumption_id:
+            raw_values[_normalize_key(assumption_id)] = value
+        if parameter:
+            raw_values[_normalize_key(parameter)] = value
+
+    return {
+        "AVG_BIRDS_PER_FARM": as_int(_resolve(raw_values, ["AVG_BIRDS_PER_FARM", "AVERAGE_BIRDS_PER_FARM"], 50000)),
+        "AVG_BIRDS_PER_TRADER": as_int(_resolve(raw_values, ["AVG_BIRDS_PER_TRADER", "AVERAGE_BIRDS_PER_TRADER"], 20000)),
+        "AVG_BIRDS_PER_TRUCK": as_int(_resolve(raw_values, ["AVG_BIRDS_PER_TRUCK"], 9000)),
+        "PRODUCTION_LINE_CAPACITY": as_float(_resolve(raw_values, ["PRODUCTION_LINE_CAPACITY", "PROD_LINE_CAPACITY"], 250.0)),
+        "LIVE_BIRD_RATE": as_float(_resolve(raw_values, ["LIVE_BIRD_RATE", "BIRD_RATE"], 180.0)),
+        "YIELD_PCT": as_float(_resolve(raw_values, ["YIELD_PCT"], 72.0)),
+        "PROCESSING_LOSS_PCT": as_float(_resolve(raw_values, ["PROCESSING_LOSS_PCT"], 3.0)),
+        "MORTALITY_PCT": as_float(_resolve(raw_values, ["MORTALITY_PCT"], 2.0)),
+        "PACKAGING_COST_PER_KG": as_float(_resolve(raw_values, ["PACKAGING_COST_PER_KG", "PACKAGING_COST"], 18.0)),
+        "TRANSPORT_COST_PER_KG": as_float(_resolve(raw_values, ["TRANSPORT_COST_PER_KG", "TRANSPORT_COST"], 12.0)),
+        "WORKING_CAPITAL_PCT": as_float(_resolve(raw_values, ["WORKING_CAPITAL_PCT", "WC_PCT"], 0.22)),
+        "EBITDA_MARGIN_PCT": as_float(_resolve(raw_values, ["EBITDA_MARGIN_PCT", "EBITDA_MARGIN"], 0.18)),
+        "PAT_MARGIN_PCT": as_float(_resolve(raw_values, ["PAT_MARGIN_PCT", "PAT_MARGIN"], 0.10)),
+        "CAPEX_PER_LINE": as_float(_resolve(raw_values, ["CAPEX_PER_LINE", "CAPEX_PER_PROD_LINE"], 50000000.0)),
+        "ASP_KG": as_float(_resolve(raw_values, ["ASP_KG", "ASP"], 240.0)),
+        "AVG_BIRD_WEIGHT": as_float(_resolve(raw_values, ["AVG_BIRD_WEIGHT"], 1.8)),
+        "WORKING_DAYS": as_int(_resolve(raw_values, ["WORKING_DAYS"], 25)),
+        "PLANT_CAPACITY_PER_LINE_MT_DAY": as_float(_resolve(raw_values, ["PLANT_CAPACITY_PER_LINE_MT_DAY"], 10.0)),
+        "WORKING_HOURS_PER_SHIFT": as_float(_resolve(raw_values, ["WORKING_HOURS_PER_SHIFT"], 8.0)),
+        "MAX_SHIFTS": as_int(_resolve(raw_values, ["MAX_SHIFTS", "MAXIMUM_SHIFTS"], 3)),
+        "COLD_STORAGE_BUFFER_DAYS": as_float(_resolve(raw_values, ["COLD_STORAGE_BUFFER_DAYS"], 3.0)),
+        "UTILIZATION_THRESHOLD_PCT": as_float(_resolve(raw_values, ["UTILIZATION_THRESHOLD_PCT", "UTILIZATION_THRESHOLD"], 85.0)),
+    }
+
+
+def get_assumption(assumptions, lookup_keys, default=None):
+    for key in lookup_keys:
+        if key in assumptions:
+            return assumptions[key]
+    return default
+
+
+def load_logic_registry(path):
+    if not os.path.exists(path):
+        return pd.DataFrame(columns=["logic_id", "business_area", "description", "formula", "assumption_keys", "used_by"])
+    return pd.read_csv(path)
+
+
+def load_market_registry(path):
+    if not os.path.exists(path):
+        return pd.DataFrame(columns=[
+            "market_id", "country", "state", "city", "distance_km", "growth_stage",
+            "preferred_transport", "warehouse_required", "distribution_center_required",
+            "break_even_revenue", "revenue_allocation_cr", "remarks"
+        ])
+
+    df = pd.read_csv(path)
+    for col in [
+        "market_id", "country", "state", "city", "distance_km", "growth_stage",
+        "preferred_transport", "warehouse_required", "distribution_center_required",
+        "break_even_revenue", "revenue_allocation_cr", "remarks", "assigned_plant_id"
+    ]:
+        if col not in df.columns:
+            df[col] = None
+
+    df["city"] = df["city"].fillna("N/A")
+    df["state"] = df["state"].fillna("N/A")
+    df["distance_km"] = pd.to_numeric(df["distance_km"], errors="coerce").fillna(0.0)
+    df["break_even_revenue"] = pd.to_numeric(df["break_even_revenue"], errors="coerce").fillna(0.0)
+    df["revenue_allocation_cr"] = pd.to_numeric(df["revenue_allocation_cr"], errors="coerce").fillna(0.0)
+    df["growth_stage"] = df["growth_stage"].fillna("Scale-up")
+    df["preferred_transport"] = df["preferred_transport"].fillna("Road")
+    df["warehouse_required"] = df["warehouse_required"].fillna("No")
+    df["distribution_center_required"] = df["distribution_center_required"].fillna("No")
+    df["remarks"] = df["remarks"].fillna("")
+    df["assigned_plant_id"] = df["assigned_plant_id"].fillna("PLANT_KOL")
+    return df
+
+
+def load_plant_registry(path):
+    columns = [
+        "plant_id", "plant_name", "city", "state", "status", "production_mode",
+        "installed_capacity_mt_day", "line_capacity_mt_day", "maximum_shifts",
+        "cold_storage_capacity_mt", "served_markets", "is_default"
+    ]
+    if not os.path.exists(path):
+        return pd.DataFrame([{
+            "plant_id": "PLANT_KOL",
+            "plant_name": "Kolkata Plant",
+            "city": "Kolkata",
+            "state": "West Bengal",
+            "status": "Active",
+            "production_mode": "Semi Automatic",
+            "installed_capacity_mt_day": 10.0,
+            "line_capacity_mt_day": 10.0,
+            "maximum_shifts": 3,
+            "cold_storage_capacity_mt": 30.0,
+            "served_markets": "Kolkata|Guwahati|Patna|Bhubaneswar",
+            "is_default": "Yes",
+        }], columns=columns)
+
+    df = pd.read_csv(path)
+    for col in columns:
+        if col not in df.columns:
+            df[col] = None
+    df["plant_id"] = df["plant_id"].fillna("PLANT_KOL")
+    df["plant_name"] = df["plant_name"].fillna(df["plant_id"])
+    df["status"] = df["status"].fillna("Active")
+    df["production_mode"] = df["production_mode"].fillna("Semi Automatic")
+    df["installed_capacity_mt_day"] = pd.to_numeric(df["installed_capacity_mt_day"], errors="coerce").fillna(10.0)
+    df["line_capacity_mt_day"] = pd.to_numeric(df["line_capacity_mt_day"], errors="coerce").fillna(10.0)
+    df["maximum_shifts"] = pd.to_numeric(df["maximum_shifts"], errors="coerce").fillna(3).astype(int)
+    df["cold_storage_capacity_mt"] = pd.to_numeric(df["cold_storage_capacity_mt"], errors="coerce").fillna(30.0)
+    df["is_default"] = df["is_default"].fillna("No")
+    return df
+
+
+def stage_profile(stage):
+    profiles = {
+        "Startup": {
+            "employees_per_line": 60,
+            "line_capacity_mt_month": 0.7,
+            "capex_per_line": 30_000_000,
+            "working_capital_pct": 0.28,
+            "warehouse_count": 1,
+            "automation": "Manual",
+            "automation_note": "Higher manpower and manual handling are required at launch.",
+        },
+        "Scale-up": {
+            "employees_per_line": 45,
+            "line_capacity_mt_month": 1.1,
+            "capex_per_line": 50_000_000,
+            "working_capital_pct": 0.24,
+            "warehouse_count": 2,
+            "automation": "Semi Automatic",
+            "automation_note": "Semi-automatic operations support early scale-up discipline.",
+        },
+        "Regional": {
+            "employees_per_line": 38,
+            "line_capacity_mt_month": 1.4,
+            "capex_per_line": 65_000_000,
+            "working_capital_pct": 0.22,
+            "warehouse_count": 2,
+            "automation": "Semi Automatic",
+            "automation_note": "Regional expansion requires moderate automation and stronger logistics.",
+        },
+        "Multi-state": {
+            "employees_per_line": 35,
+            "line_capacity_mt_month": 1.8,
+            "capex_per_line": 75_000_000,
+            "working_capital_pct": 0.20,
+            "warehouse_count": 3,
+            "automation": "Fully Automatic",
+            "automation_note": "Multi-state expansion benefits from automation and regional warehousing.",
+        },
+        "National": {
+            "employees_per_line": 30,
+            "line_capacity_mt_month": 2.2,
+            "capex_per_line": 90_000_000,
+            "working_capital_pct": 0.18,
+            "warehouse_count": 4,
+            "automation": "Fully Automatic",
+            "automation_note": "National scale requires high automation and multi-node warehousing.",
+        },
+    }
+    return profiles.get(stage, profiles["Startup"])
+
+
+base_dir = os.path.dirname(__file__)
+assumptions_path = os.path.join(base_dir, "..", "business_assumptions.csv")
+market_registry_path = os.path.join(base_dir, "..", "market_registry.csv")
+plant_registry_path = os.path.join(base_dir, "..", "plant_registry.csv")
+formula_registry_path = os.path.join(base_dir, "..", "formula_registry.csv")
+dependency_registry_path = os.path.join(base_dir, "..", "dependency_registry.csv")
+logic_registry_path = os.path.join(base_dir, "..", "logic_registry.csv")
+product_registry_path = os.path.join(base_dir, "..", "product_registry.csv")
+channel_registry_path = os.path.join(base_dir, "..", "channel_registry.csv")
+pricing_registry_path = os.path.join(base_dir, "..", "pricing_registry.csv")
+cost_registry_path = os.path.join(base_dir, "..", "cost_registry.csv")
+order_registry_path = os.path.join(base_dir, "..", "order_registry.csv")
+
+assumptions = load_assumptions(assumptions_path)
+market_registry = load_market_registry(market_registry_path)
+plant_registry = load_plant_registry(plant_registry_path)
+formula_registry = pd.read_csv(formula_registry_path) if os.path.exists(formula_registry_path) else pd.DataFrame()
+dependency_registry = pd.read_csv(dependency_registry_path) if os.path.exists(dependency_registry_path) else pd.DataFrame()
+logic_registry = load_logic_registry(logic_registry_path)
+product_registry = pd.read_csv(product_registry_path) if os.path.exists(product_registry_path) else pd.DataFrame()
+channel_registry = pd.read_csv(channel_registry_path) if os.path.exists(channel_registry_path) else pd.DataFrame()
+pricing_registry = pd.read_csv(pricing_registry_path) if os.path.exists(pricing_registry_path) else pd.DataFrame()
+cost_registry = pd.read_csv(cost_registry_path) if os.path.exists(cost_registry_path) else pd.DataFrame()
+order_registry = pd.read_csv(order_registry_path) if os.path.exists(order_registry_path) else pd.DataFrame(columns=[
+    "order_id", "order_date", "market_id", "channel", "customer_id", "sku_id",
+    "product_group", "ordered_quantity_kg", "required_delivery_date",
+    "assigned_plant_id", "order_status"
+])
+
+formula_lookup = {str(row.get("kpi_name", "")).strip(): row for _, row in formula_registry.iterrows()} if not formula_registry.empty else {}
+dependency_lookup = dependency_registry if not dependency_registry.empty else pd.DataFrame(columns=["affected_kpi_name", "driver_name", "business_reason"])
+logic_lookup = {str(row.get("business_area", "")).strip(): row for _, row in logic_registry.iterrows()} if not logic_registry.empty else {}
+
+with st.sidebar:
+    st.header("Business Planning Inputs")
+    corporate_revenue_cr = st.number_input("Corporate Revenue Target (₹ Cr / month)", min_value=float(0.0), value=float(6.0), step=float(1.0))
+    business_stage = st.selectbox("Business Stage", ["Startup", "Scale-up", "Regional", "Multi-state", "National"], index=0)
+    operating_model = st.selectbox("Operating Model", ["Asset Light", "Partial Integration", "Fully Integrated"], index=0)
+
+    st.subheader("Product Mix")
+    product_mix = {}
+    for _, row in product_registry.iterrows():
+        product_id = str(row.get("product_id", "")).strip()
+        product_name = str(row.get("product_name", product_id))
+        default_mix = as_float(row.get("default_mix_percent", 0.0))
+        product_mix[product_id] = st.slider(f"{product_name} %", 0, 100, int(default_mix), key=f"product_{product_id}")
+
+    st.subheader("Channel Mix")
+    channel_mix = {}
+    for _, row in channel_registry.iterrows():
+        channel_id = str(row.get("channel_id", "")).strip()
+        channel_name = str(row.get("channel_name", channel_id))
+        default_mix = as_float(row.get("default_mix_percent", 0.0))
+        channel_mix[channel_id] = st.slider(f"{channel_name} %", 0, 100, int(default_mix), key=f"channel_{channel_id}")
+
+    with st.sidebar.expander("Advanced Procurement Assumptions", expanded=False):
+        st.subheader("Procurement Drivers")
+        live_bird_rate = st.number_input("Live Bird Rate (₹/kg)", min_value=float(0.0), max_value=float(500.0), value=get_assumption(assumptions, ["LIVE_BIRD_RATE"], as_float(180.0)), step=float(5.0))
+        yield_pct = st.number_input("Yield %", min_value=float(0.0), max_value=float(100.0), value=get_assumption(assumptions, ["YIELD_PCT"], as_float(72.0)), step=float(1.0))
+        mortality_pct = st.number_input("Mortality %", min_value=float(0.0), max_value=float(100.0), value=get_assumption(assumptions, ["MORTALITY_PCT"], as_float(4.0)), step=float(0.5))
+        processing_loss_pct = st.number_input("Processing Loss %", min_value=float(0.0), max_value=float(100.0), value=get_assumption(assumptions, ["PROCESSING_LOSS_PCT"], as_float(3.0)), step=float(0.5))
+        trader_margin_pct = st.number_input("Trader Margin %", min_value=float(0.0), max_value=float(100.0), value=get_assumption(assumptions, ["TRADER_MARGIN_PCT"], as_float(6.0)), step=float(0.5))
+        farm_margin_pct = st.number_input("Farm Margin %", min_value=float(0.0), max_value=float(100.0), value=get_assumption(assumptions, ["FARM_MARGIN_PCT"], as_float(4.0)), step=float(0.5))
+        packaging_cost = st.number_input("Packaging Cost (₹/kg)", min_value=float(0.0), max_value=float(250.0), value=get_assumption(assumptions, ["PACKAGING_COST_PER_KG"], as_float(18.0)), step=float(1.0))
+        transport_cost = st.number_input("Transport Cost (₹/kg)", min_value=float(0.0), max_value=float(250.0), value=get_assumption(assumptions, ["TRANSPORT_COST_PER_KG"], as_float(12.0)), step=float(1.0))
+
+    with st.sidebar.expander("Advanced Plant Assumptions", expanded=False):
+        st.subheader("Operational Assumptions")
+        asp_per_kg = st.number_input("Average Selling Price / kg", min_value=float(0.0), max_value=float(1000.0), value=get_assumption(assumptions, ["ASP_KG"], as_float(240.0)), step=float(10.0))
+        avg_bird_weight = st.number_input("Average Bird Weight (kg)", min_value=float(0.1), max_value=float(5.0), value=get_assumption(assumptions, ["AVG_BIRD_WEIGHT"], as_float(1.8)), step=float(0.1))
+        working_days = st.number_input("Working Days", min_value=int(1), max_value=int(365), value=get_assumption(assumptions, ["WORKING_DAYS"], as_int(25)), step=int(1))
+        avg_farm_capacity = st.number_input("Average Farm Capacity (Birds)", min_value=int(1), max_value=int(1000000), value=get_assumption(assumptions, ["AVG_BIRDS_PER_FARM"], as_int(50000)), step=int(1000))
+        avg_trader_capacity = st.number_input("Average Trader Capacity (Birds)", min_value=int(1), max_value=int(1000000), value=get_assumption(assumptions, ["AVG_BIRDS_PER_TRADER"], as_int(20000)), step=int(1000))
+
+        st.subheader("Plant & Manufacturing Assumptions")
+        plant_capacity_per_line_mt_day = st.number_input("Plant Capacity / Line / Day (MT)", min_value=float(0.1), max_value=float(500.0), value=get_assumption(assumptions, ["PLANT_CAPACITY_PER_LINE_MT_DAY"], as_float(10.0)), step=float(0.5))
+        working_hours_per_shift = st.number_input("Working Hours / Shift", min_value=float(1.0), max_value=float(24.0), value=get_assumption(assumptions, ["WORKING_HOURS_PER_SHIFT"], as_float(8.0)), step=float(1.0))
+        max_shifts = st.number_input("Maximum Shifts", min_value=int(1), max_value=int(4), value=get_assumption(assumptions, ["MAX_SHIFTS"], as_int(3)), step=int(1))
+        cold_storage_buffer_days = st.number_input("Cold Storage Buffer Days", min_value=float(0.0), max_value=float(30.0), value=get_assumption(assumptions, ["COLD_STORAGE_BUFFER_DAYS"], as_float(3.0)), step=float(0.5))
+        utilization_threshold_pct = st.number_input("Utilization Threshold %", min_value=float(1.0), max_value=float(100.0), value=get_assumption(assumptions, ["UTILIZATION_THRESHOLD_PCT"], as_float(85.0)), step=float(1.0))
+
+    with st.sidebar.expander("Advanced Logistics Assumptions", expanded=False):
+        st.subheader("Logistics Assumptions")
+        primary_vehicle_capacity_kg = st.number_input("Primary Vehicle Capacity (kg)", min_value=float(1.0), max_value=float(50000.0), value=float(4000.0), step=float(500.0))
+        primary_trips_per_vehicle_per_day = st.number_input("Primary Trips per Vehicle per Day", min_value=int(1), max_value=int(10), value=int(2), step=int(1))
+        average_primary_distance_km = st.number_input("Average Primary Distance (km)", min_value=float(0.0), max_value=float(2000.0), value=float(100.0), step=float(10.0))
+        primary_cost_per_km = st.number_input("Primary Cost per km", min_value=float(0.0), max_value=float(500.0), value=float(28.0), step=float(1.0))
+        primary_fixed_cost_per_trip = st.number_input("Primary Fixed Cost per trip", min_value=float(0.0), max_value=float(50000.0), value=float(1500.0), step=float(500.0))
+        secondary_vehicle_capacity_mt = st.number_input("Secondary Vehicle Capacity (MT)", min_value=float(0.1), max_value=float(50.0), value=float(2.0), step=float(0.5))
+        secondary_trips_per_vehicle_per_day = st.number_input("Secondary Trips per Vehicle per Day", min_value=int(1), max_value=int(10), value=int(2), step=int(1))
+        secondary_cost_per_km = st.number_input("Secondary Cost per km", min_value=float(0.0), max_value=float(500.0), value=float(32.0), step=float(1.0))
+        secondary_fixed_cost_per_trip = st.number_input("Secondary Fixed Cost per trip", min_value=float(0.0), max_value=float(50000.0), value=float(2000.0), step=float(500.0))
+        cold_chain_cost_multiplier = st.number_input("Cold Chain Cost Multiplier", min_value=float(1.0), max_value=float(5.0), value=float(1.20), step=float(0.05))
+
+    with st.sidebar.expander("Contract and Tender Inputs", expanded=False):
+        st.subheader("Distributor and Channel Sales Assumptions")
+        fresh_distributor_enabled = st.checkbox("Enable Fresh Distributor", value=False)
+        shared_frozen_rte_distributor = st.checkbox("Shared Frozen + RTE Distributor", value=True)
+        fresh_revenue_per_distributor = st.number_input("Fresh revenue handled per distributor / month", min_value=float(1.0), max_value=float(100_000_000.0), value=float(4_000_000.0), step=float(500_000.0))
+        frozen_revenue_per_distributor = st.number_input("Frozen revenue handled per distributor / month", min_value=float(1.0), max_value=float(100_000_000.0), value=float(6_000_000.0), step=float(500_000.0))
+        rte_revenue_per_distributor = st.number_input("RTE revenue handled per distributor / month", min_value=float(1.0), max_value=float(100_000_000.0), value=float(7_500_000.0), step=float(500_000.0))
+        gt_revenue_per_sales_executive = st.number_input("GT revenue per sales executive / month", min_value=float(1.0), max_value=float(100_000_000.0), value=float(3_000_000.0), step=float(500_000.0))
+        gt_outlets_per_sales_executive = st.number_input("GT outlets per sales executive", min_value=int(1), max_value=int(1000), value=int(50), step=int(5))
+        gt_sales_executives_per_asm = st.number_input("GT sales executives per ASM", min_value=int(1), max_value=int(50), value=int(6), step=int(1))
+        mt_revenue_per_kam = st.number_input("MT revenue per KAM / month", min_value=float(1.0), max_value=float(100_000_000.0), value=float(7_500_000.0), step=float(500_000.0))
+        quick_commerce_revenue_per_kam = st.number_input("Quick Commerce revenue per KAM / month", min_value=float(1.0), max_value=float(100_000_000.0), value=float(10_000_000.0), step=float(500_000.0))
+        horeca_revenue_per_sales_executive = st.number_input("HoReCa revenue per sales executive / month", min_value=float(1.0), max_value=float(100_000_000.0), value=float(4_000_000.0), step=float(500_000.0))
+        institution_revenue_per_account_manager = st.number_input("Institution revenue per account manager / month", min_value=float(1.0), max_value=float(100_000_000.0), value=float(7_500_000.0), step=float(500_000.0))
+        calls_per_sales_executive_day = st.number_input("Calls per sales executive / day", min_value=int(1), max_value=int(100), value=int(12), step=int(1))
+
+        st.subheader("HoReCa Contract Revenue")
+        horeca_revenue_mode = st.selectbox("HoReCa Revenue Mode", ["CONTRACT", "MIX_ALLOCATION"], index=0)
+        dynamic_contract_pricing = build_contract_pricing_output(live_bird_rate)
+        recommended_contract_rate_per_kg = float(dynamic_contract_pricing["contract_rate_per_kg"])
+        horeca_contract_rate_per_kg = st.number_input("HoReCa Contract Rate (₹/kg)", min_value=float(0.01), max_value=float(1000.0), value=recommended_contract_rate_per_kg, step=float(1.0), disabled=True)
+        horeca_contract_volume_kg_month = st.number_input("HoReCa Contract Volume (kg/month)", min_value=float(0.0), max_value=float(1_000_000.0), value=float(5_000.0), step=float(500.0))
+        horeca_active_accounts = st.number_input("HoReCa Active Accounts", min_value=int(0), max_value=int(10000), value=int(10), step=int(1))
+        horeca_credit_days = st.number_input("HoReCa Credit Days", min_value=int(0), max_value=int(180), value=int(30), step=int(1))
+
+        st.subheader("Institutional / Government Contract")
+        institutional_revenue_mode = st.selectbox("Institutional / Government Revenue Mode", ["CONTRACT", "MIX_ALLOCATION"], index=0)
+        institutional_contract_rate_per_kg = st.number_input("Institutional Contract Rate (₹/kg)", min_value=float(0.01), max_value=float(1000.0), value=recommended_contract_rate_per_kg, step=float(1.0), disabled=True)
+        institutional_awarded_volume_kg_month = st.number_input("Institutional Awarded Volume (kg/month)", min_value=float(0.0), max_value=float(1_000_000.0), value=float(5_000.0), step=float(500.0))
+        institutional_contract_name = st.text_input("Contract / Tender Name", value="Institutional Curry Cut Contract")
+        institutional_contract_start_date = st.date_input("Contract Start Date", value=date.today())
+        institutional_contract_end_date = st.date_input("Contract End Date", value=date.today())
+
+fresh_pct = product_mix.get("FRESH", 0)
+frozen_pct = product_mix.get("FROZEN", 0)
+rte_pct = product_mix.get("RTE", 0)
+fva_pct = product_mix.get("FVA", 0)
+general_trade_pct = channel_mix.get("GT", 0)
+modern_trade_pct = channel_mix.get("MT", 0)
+quick_commerce_pct = channel_mix.get("QC", 0)
+ecommerce_pct = channel_mix.get("ECOM", 0)
+horeca_pct = channel_mix.get("HORECA", 0)
+institution_pct = channel_mix.get("INST", 0)
+export_pct = channel_mix.get("EXP", 0)
+product_total = sum(product_mix.values())
+channel_total = sum(channel_mix.values())
+
+with st.expander("Add or Edit Market", expanded=False):
+    market_registry = load_market_registry(market_registry_path)
+    if market_registry.empty:
+        market_registry = pd.DataFrame(columns=[
+            "market_id", "country", "state", "city", "distance_km", "growth_stage",
+            "preferred_transport", "warehouse_required", "distribution_center_required",
+            "break_even_revenue", "revenue_allocation_cr", "assigned_plant_id", "remarks"
+        ])
+
+    if "revenue_allocation_cr" not in market_registry.columns:
+        market_registry["revenue_allocation_cr"] = 0.0
+    if "assigned_plant_id" not in market_registry.columns:
+        market_registry["assigned_plant_id"] = "PLANT_KOL"
+    market_registry["assigned_plant_id"] = market_registry["assigned_plant_id"].fillna("PLANT_KOL")
+
+    if market_registry["revenue_allocation_cr"].isna().all() or float(market_registry["revenue_allocation_cr"].sum()) == 0.0:
+        if not market_registry.empty:
+            market_registry["revenue_allocation_cr"] = 0.0
+            if "Kolkata" in market_registry["city"].astype(str).tolist():
+                market_registry.loc[market_registry["city"].astype(str) == "Kolkata", "revenue_allocation_cr"] = corporate_revenue_cr
+            elif len(market_registry) > 0:
+                market_registry.iloc[0, market_registry.columns.get_loc("revenue_allocation_cr")] = corporate_revenue_cr
+        else:
+            market_registry["revenue_allocation_cr"] = 0.0
+
+    visible_markets = market_registry[[
+        "city", "state", "distance_km", "growth_stage", "preferred_transport",
+        "warehouse_required", "distribution_center_required", "break_even_revenue",
+        "revenue_allocation_cr", "assigned_plant_id", "remarks"
+    ]].copy()
+    visible_markets = visible_markets.reset_index(drop=True)
+    editable_markets = st.data_editor(
+        visible_markets,
+        num_rows="dynamic",
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "revenue_allocation_cr": st.column_config.NumberColumn("Revenue Allocation (₹ Cr)", min_value=0.0, step=0.5),
+            "distance_km": st.column_config.NumberColumn("Distance (km)", min_value=0.0, step=50.0),
+            "assigned_plant_id": st.column_config.SelectboxColumn("Assigned Plant", options=plant_registry["plant_id"].astype(str).tolist()),
+            "break_even_revenue": st.column_config.NumberColumn("Break-even Revenue (₹)", min_value=0.0, step=10_000_000.0),
+        },
+    )
+    market_registry[[
+        "city", "state", "distance_km", "growth_stage", "preferred_transport",
+        "warehouse_required", "distribution_center_required", "break_even_revenue",
+        "revenue_allocation_cr", "assigned_plant_id", "remarks"
+    ]] = editable_markets
+    market_registry["city"] = market_registry["city"].fillna("N/A")
+    market_registry["state"] = market_registry["state"].fillna("N/A")
+    market_registry["distance_km"] = pd.to_numeric(market_registry["distance_km"], errors="coerce").fillna(0.0)
+    market_registry["break_even_revenue"] = pd.to_numeric(market_registry["break_even_revenue"], errors="coerce").fillna(0.0)
+    market_registry["revenue_allocation_cr"] = pd.to_numeric(market_registry["revenue_allocation_cr"], errors="coerce").fillna(0.0)
+    market_registry["assigned_plant_id"] = market_registry["assigned_plant_id"].fillna("PLANT_KOL")
+
+    with st.form("add_market_form"):
+        st.write("Add New Market")
+        new_city = st.text_input("City", key="new_market_city")
+        new_state = st.text_input("State", key="new_market_state")
+        new_distance = st.number_input("Distance (km)", min_value=int(0), value=int(0), step=int(50), key="new_market_distance")
+        new_revenue_cr = st.number_input("Revenue Allocation (₹ Cr)", min_value=float(0.0), value=float(1.0), step=float(0.5), key="new_market_revenue")
+        submitted = st.form_submit_button("Save Market")
+        if submitted and new_city:
+            market_registry = pd.concat([
+                market_registry,
+                pd.DataFrame([{
+                    "market_id": f"MKT{len(market_registry)+1:03d}",
+                    "country": "India",
+                    "state": new_state or "N/A",
+                    "city": new_city,
+                    "distance_km": new_distance,
+                    "growth_stage": business_stage,
+                    "preferred_transport": "Road",
+                    "warehouse_required": "No",
+                    "distribution_center_required": "No",
+                    "break_even_revenue": new_revenue_cr * 10_000_000 * 1.15,
+                    "revenue_allocation_cr": new_revenue_cr,
+                    "assigned_plant_id": "PLANT_KOL",
+                    "remarks": "User-added market"
+                }])
+            ], ignore_index=True)
+            market_registry.to_csv(market_registry_path, index=False)
+            st.success(f"Saved {new_city} to the market registry.")
+
+issues = []
+if abs(product_total - 100) > 0.01:
+    issues.append("Product Mix must equal 100%.")
+if abs(channel_total - 100) > 0.01:
+    issues.append("Channel Mix must equal 100%.")
+if yield_pct <= 0 or yield_pct > 100:
+    issues.append("Yield % must be greater than 0 and less than or equal to 100.")
+if market_registry.empty:
+    issues.append("Add at least one market before planning.")
+else:
+    if len(market_registry) == 1:
+        market_registry.loc[market_registry.index[0], "revenue_allocation_cr"] = corporate_revenue_cr
+    allocation_total_cr = float(market_registry["revenue_allocation_cr"].sum())
+    if market_registry["revenue_allocation_cr"].notna().any() and float(market_registry["revenue_allocation_cr"].count()) > 0:
+        if abs(allocation_total_cr - corporate_revenue_cr) > 0.01:
+            issues.append("Revenue Allocation must equal Corporate Revenue.")
+
+if issues:
+    st.error("Validation failed: " + " ".join(issues))
+    st.stop()
+
+stage = stage_profile(business_stage)
+corporate_revenue_rupees = corporate_revenue_cr * 10_000_000
+allocation_total_rupees = float(market_registry["revenue_allocation_cr"].sum()) * 10_000_000
+active_plants = plant_registry[plant_registry["status"].astype(str).str.lower() == "active"].copy()
+if active_plants.empty:
+    active_plants = plant_registry.copy()
+default_plant_id = "PLANT_KOL"
+default_matches = active_plants[active_plants["is_default"].astype(str).str.lower() == "yes"]
+if not default_matches.empty:
+    default_plant_id = str(default_matches.iloc[0].get("plant_id", "PLANT_KOL"))
+
+plant_results = {}
+for _, plant in active_plants.iterrows():
+    plant_id = str(plant.get("plant_id", "")).strip()
+    assigned_markets = market_registry[market_registry["assigned_plant_id"].astype(str) == plant_id]
+    plant_results[plant_id] = build_plant_planning(
+        plant=plant,
+        assigned_markets=assigned_markets,
+        product_mix=product_mix,
+        channel_mix=channel_mix,
+        product_registry=product_registry,
+        channel_registry=channel_registry,
+        pricing_registry=pricing_registry,
+        cost_registry=cost_registry,
+        avg_bird_weight=avg_bird_weight,
+        working_days=working_days,
+        stage_profile=stage,
+        live_bird_rate=live_bird_rate,
+        yield_pct=yield_pct,
+        operating_model=operating_model,
+        business_stage=business_stage,
+        plant_capacity_per_line_mt_day=plant_capacity_per_line_mt_day,
+        working_hours_per_shift=working_hours_per_shift,
+        max_shifts=max_shifts,
+        cold_storage_buffer_days=cold_storage_buffer_days,
+        utilization_threshold_pct=utilization_threshold_pct,
+    )
+
+plant_options = active_plants["plant_name"].astype(str).tolist()
+plant_id_by_name = {str(row.get("plant_name")): str(row.get("plant_id")) for _, row in active_plants.iterrows()}
+default_plant_index = 0
+for idx, plant_name in enumerate(plant_options):
+    if plant_id_by_name.get(plant_name) == default_plant_id:
+        default_plant_index = idx
+        break
+selected_plant_name = st.selectbox("Select Plant", plant_options, index=default_plant_index)
+selected_plant_id = plant_id_by_name[selected_plant_name]
+selected_plant_result = plant_results[selected_plant_id]
+selected_plant_row = active_plants[active_plants["plant_id"].astype(str) == selected_plant_id]
+if selected_plant_row.empty:
+    selected_plant_row = active_plants.iloc[[0]]
+selected_plant_markets = market_registry[market_registry["assigned_plant_id"].astype(str) == selected_plant_id]
+if selected_plant_markets.empty:
+    selected_plant_markets = market_registry
+market_options = [str(city) for city in selected_plant_markets["city"].fillna("N/A")]
+selected_market_name = st.selectbox("Select Market for Market-specific Planning", market_options, index=0)
+selected_market = selected_plant_markets[selected_plant_markets["city"].astype(str) == selected_market_name].iloc[0]
+selected_market_city = str(selected_market.get("city", selected_market_name) or selected_market_name)
+selected_plant_city = str(selected_plant_row.iloc[0].get("city", selected_plant_name) or selected_plant_name)
+market_revenue_rupees = float(selected_market.get("revenue_allocation_cr", 0.0)) * 10_000_000
+selected_market_revenue = market_revenue_rupees
+market_distance_km = float(selected_market.get("distance_km", 0.0) or 0.0)
+market_growth_stage = selected_market.get("growth_stage", business_stage) or business_stage
+
+revenue_rupees = market_revenue_rupees
+market_results = build_financial_chain(
+    product_mix=product_mix,
+    channel_mix=channel_mix,
+    product_registry=product_registry,
+    channel_registry=channel_registry,
+    pricing_registry=pricing_registry,
+    cost_registry=cost_registry,
+    revenue_rupees=revenue_rupees,
+    avg_bird_weight=avg_bird_weight,
+    working_days=working_days,
+    stage_profile=stage,
+    market_distance_km=market_distance_km,
+    live_bird_rate=live_bird_rate,
+    yield_pct=yield_pct,
+    plant_capacity_per_line_mt_day=plant_capacity_per_line_mt_day,
+    working_hours_per_shift=working_hours_per_shift,
+    max_shifts=max_shifts,
+    cold_storage_buffer_days=cold_storage_buffer_days,
+    utilization_threshold_pct=utilization_threshold_pct,
+    operating_model=operating_model,
+    business_stage=business_stage,
+)
+results = market_results
+corporate_plant_revenue = sum(result.get("assigned_market_revenue", 0.0) for result in plant_results.values())
+corporate_birds_day = sum(result.get("birds_per_day", 0.0) for result in plant_results.values())
+corporate_capacity_mt_day = sum(result.get("plant_capacity_output", {}).get("installed_capacity_mt_day", 0.0) for result in plant_results.values())
+raw_material_output = results["raw_material_output"]
+plant_raw_material_output = selected_plant_result["raw_material_output"]
+plant_capacity_output = selected_plant_result["plant_capacity_output"]
+manpower_output = selected_plant_result["manpower_output"]
+logistics_output = build_logistics_output(
+    plant_raw_material_output=plant_raw_material_output,
+    market_raw_material_output=raw_material_output,
+    product_mix=product_mix,
+    market_distance_km=market_distance_km,
+    avg_bird_weight=avg_bird_weight,
+    working_days=working_days,
+    primary_vehicle_capacity_kg=primary_vehicle_capacity_kg,
+    primary_trips_per_vehicle_per_day=primary_trips_per_vehicle_per_day,
+    average_primary_distance_km=average_primary_distance_km,
+    primary_cost_per_km=primary_cost_per_km,
+    primary_fixed_cost_per_trip=primary_fixed_cost_per_trip,
+    secondary_vehicle_capacity_mt=secondary_vehicle_capacity_mt,
+    secondary_trips_per_vehicle_per_day=secondary_trips_per_vehicle_per_day,
+    secondary_cost_per_km=secondary_cost_per_km,
+    secondary_fixed_cost_per_trip=secondary_fixed_cost_per_trip,
+    cold_chain_cost_multiplier=cold_chain_cost_multiplier,
+    plant_id=selected_plant_id,
+)
+distributor_output = build_distributor_output(
+    market_revenue=market_revenue_rupees,
+    product_mix=product_mix,
+    fresh_revenue_per_distributor=fresh_revenue_per_distributor,
+    frozen_revenue_per_distributor=frozen_revenue_per_distributor,
+    rte_revenue_per_distributor=rte_revenue_per_distributor,
+    fresh_distributor_enabled=fresh_distributor_enabled,
+    shared_frozen_rte_distributor=shared_frozen_rte_distributor,
+)
+channel_sales_output = build_channel_sales_output(
+    market_revenue=market_revenue_rupees,
+    channel_mix=channel_mix,
+    working_days=working_days,
+    gt_revenue_per_sales_executive=gt_revenue_per_sales_executive,
+    gt_outlets_per_sales_executive=gt_outlets_per_sales_executive,
+    gt_sales_executives_per_asm=gt_sales_executives_per_asm,
+    mt_revenue_per_kam=mt_revenue_per_kam,
+    quick_commerce_revenue_per_kam=quick_commerce_revenue_per_kam,
+    horeca_revenue_per_sales_executive=horeca_revenue_per_sales_executive,
+    institution_revenue_per_account_manager=institution_revenue_per_account_manager,
+    calls_per_sales_executive_day=calls_per_sales_executive_day,
+    distributor_output=distributor_output,
+    business_stage=business_stage,
+    live_bird_rate=live_bird_rate,
+    horeca_revenue_mode=horeca_revenue_mode,
+    horeca_contract_rate_per_kg=horeca_contract_rate_per_kg,
+    horeca_contract_volume_kg_month=horeca_contract_volume_kg_month,
+    horeca_active_accounts=horeca_active_accounts,
+    horeca_credit_days=horeca_credit_days,
+    institutional_revenue_mode=institutional_revenue_mode,
+    institutional_contract_rate_per_kg=institutional_contract_rate_per_kg,
+    institutional_awarded_volume_kg_month=institutional_awarded_volume_kg_month,
+    institutional_contract_name=institutional_contract_name,
+    institutional_contract_start_date=str(institutional_contract_start_date),
+    institutional_contract_end_date=str(institutional_contract_end_date),
+    revenue_mode="PLANNING",
+)
+channel_sales_output = dict(channel_sales_output)
+channel_sales_output.setdefault("selected_market_revenue", selected_market_revenue)
+channel_sales_output.setdefault("contract_revenue_total", float(channel_sales_output.get("horeca", {}).get("revenue", 0.0) or 0.0) + float(channel_sales_output.get("institution", {}).get("revenue", 0.0) or 0.0))
+channel_sales_output.setdefault("residual_revenue", max(0.0, selected_market_revenue - float(channel_sales_output.get("contract_revenue_total", 0.0) or 0.0)))
+channel_sales_output.setdefault("gt_revenue", float(channel_sales_output.get("general_trade", {}).get("revenue", 0.0) or 0.0))
+channel_sales_output.setdefault("mt_revenue", float(channel_sales_output.get("modern_trade", {}).get("revenue", 0.0) or 0.0))
+channel_sales_output.setdefault("qcom_revenue", float(channel_sales_output.get("quick_commerce", {}).get("revenue", 0.0) or 0.0))
+channel_sales_output.setdefault("ecommerce_revenue", float(channel_sales_output.get("ecommerce", {}).get("revenue", 0.0) or 0.0))
+channel_sales_output.setdefault("exports_revenue", float(channel_sales_output.get("exports", {}).get("revenue", 0.0) or 0.0))
+channel_sales_output.setdefault("horeca_revenue", float(channel_sales_output.get("horeca", {}).get("revenue", 0.0) or 0.0))
+channel_sales_output.setdefault("institutional_government_revenue", float(channel_sales_output.get("institution", {}).get("revenue", 0.0) or 0.0))
+channel_sales_output.setdefault(
+    "total_commercial_revenue",
+    float(channel_sales_output.get("gt_revenue", 0.0) or 0.0)
+    + float(channel_sales_output.get("mt_revenue", 0.0) or 0.0)
+    + float(channel_sales_output.get("qcom_revenue", 0.0) or 0.0)
+    + float(channel_sales_output.get("ecommerce_revenue", 0.0) or 0.0)
+    + float(channel_sales_output.get("exports_revenue", 0.0) or 0.0)
+    + float(channel_sales_output.get("horeca_revenue", 0.0) or 0.0)
+    + float(channel_sales_output.get("institutional_government_revenue", 0.0) or 0.0),
+)
+channel_sales_output.setdefault("reconciliation_gap", selected_market_revenue - float(channel_sales_output.get("total_commercial_revenue", 0.0) or 0.0))
+selected_plant_market_count = len(selected_plant_markets)
+total_active_accounts_supported = (
+    int(channel_sales_output["general_trade"].get("outlets", 0) or 0)
+    + int(channel_sales_output["modern_trade"].get("accounts", 0) or 0)
+    + int(channel_sales_output["quick_commerce"].get("dark_stores", 0) or 0)
+    + int(channel_sales_output["horeca"].get("accounts", 0) or 0)
+    + int(channel_sales_output["institution"].get("accounts", 0) or 0)
+)
+total_commercial_revenue = float(channel_sales_output.get("total_commercial_revenue", selected_market_revenue) or selected_market_revenue)
+selected_market_revenue_output = float(channel_sales_output.get("selected_market_revenue", selected_market_revenue) or selected_market_revenue)
+commercial_reconciliation_gap = float(channel_sales_output.get("reconciliation_gap", selected_market_revenue_output - total_commercial_revenue) or 0.0)
+if abs(total_commercial_revenue - selected_market_revenue_output) > 1.0:
+    st.warning("Total Commercial Revenue is not reconciled to Selected Market Revenue. Review contract commitments and residual channel allocation.")
+sales_coordinator_required = bool(
+    total_commercial_revenue > 100_000_000.0
+    or total_active_accounts_supported >= 50
+    or selected_plant_market_count > 1
+)
+sales_coordinator_hc = 1 if sales_coordinator_required else 0
+channel_sales_output["sales_coordinator_mis"] = sales_coordinator_hc
+channel_sales_output["sales_coordinator"] = sales_coordinator_hc
+channel_sales_output["total_commercial_hc"] = (
+    int(channel_sales_output.get("sales_manager", 0) or 0)
+    + int(channel_sales_output.get("gt_sales_executives", 0) or 0)
+    + int(channel_sales_output.get("mt_kam", 0) or 0)
+    + int(channel_sales_output.get("qcom_kam", 0) or 0)
+    + int(channel_sales_output.get("ecommerce_kam", 0) or 0)
+    + int(channel_sales_output.get("exports_manager", 0) or 0)
+    + int(channel_sales_output.get("horeca_sales_hc", 0) or 0)
+    + int(channel_sales_output.get("institution_government_manager", 0) or 0)
+    + sales_coordinator_hc
+)
+channel_sales_output["total_sales_hc"] = channel_sales_output["total_commercial_hc"]
+channel_sales_output["total_commercial_revenue"] = total_commercial_revenue
+channel_sales_output["reconciliation_gap"] = commercial_reconciliation_gap
+channel_sales_output["selected_market_revenue"] = selected_market_revenue_output
+channel_sales_output["total_markets_supported"] = selected_plant_market_count
+channel_sales_output["total_active_accounts_supported"] = total_active_accounts_supported
+channel_sales_output["sales_coordinator_required"] = sales_coordinator_required
+validate_required_keys(channel_sales_output, [
+    "selected_market_revenue",
+    "total_commercial_revenue",
+    "general_trade",
+    "horeca",
+    "institutional_government",
+], "Channel Sales")
+validate_required_keys(channel_sales_output["general_trade"], [
+    "required_distributors",
+    "active_distributors",
+    "target_outlets",
+    "outlets_per_distributor",
+    "coverage_gap_distributors",
+    "coverage_status",
+    "sales_executives",
+    "revenue_per_sales_executive",
+    "beats",
+    "calls_per_day",
+    "supported_revenue",
+    "revenue_at_risk",
+], "General Trade")
+validate_required_keys(channel_sales_output["horeca"], [
+    "planned_revenue",
+    "revenue",
+    "live_bird_rate",
+    "average_live_bird_weight_kg",
+    "dressed_output_kg",
+    "dressed_yield_pct",
+    "raw_material_cost_per_kg",
+    "processing_cost_per_kg",
+    "packaging_cost_per_kg",
+    "cold_chain_logistics_cost_per_kg",
+    "factory_overhead_per_kg",
+    "total_cost_per_kg",
+    "target_margin_pct",
+    "recommended_selling_price_per_kg",
+    "contract_rate_per_kg",
+    "required_volume_kg_month",
+    "active_accounts",
+    "required_hc",
+    "credit_days",
+], "HoReCa")
+validate_required_keys(channel_sales_output["institutional_government"], [
+    "planned_revenue",
+    "revenue",
+    "product",
+    "pack_size_kg",
+    "pack_type",
+    "mrp",
+    "live_bird_rate",
+    "dressed_yield_pct",
+    "raw_material_cost_per_kg",
+    "processing_cost_per_kg",
+    "packaging_cost_per_kg",
+    "cold_chain_logistics_cost_per_kg",
+    "factory_overhead_per_kg",
+    "total_cost_per_kg",
+    "target_margin_pct",
+    "recommended_selling_price_per_kg",
+    "contract_rate_per_kg",
+    "contract_value_per_pack",
+    "required_volume_kg_month",
+    "required_packs_month",
+    "active_tenders_contracts",
+    "required_hc",
+    "contract_name",
+    "contract_start_date",
+    "contract_end_date",
+], "Institutional / Government")
+planned_channel_volume_kg = {}
+channel_volume_output = results.get("channel_product_volume_output", {}).get("channels", {})
+for channel_label, revenue_key in {
+    "GT": "general_trade",
+    "MT": "modern_trade",
+    "QCom": "quick_commerce",
+    "E-commerce": "ecommerce",
+    "HoReCa": "horeca",
+    "Institutional / Government": "institution",
+    "Exports": "exports",
+}.items():
+    planned_channel_volume_kg[channel_label] = float(channel_volume_output.get(revenue_key, {}).get("total_kg_month", 0.0) or 0.0)
+
+with st.sidebar.expander("Order Scenario Testing", expanded=False):
+    order_scenario_mode = st.selectbox("Order Scenario Mode", ["No Scenario", "Channel Achievement %", "Manual Order Volume"], index=0)
+    channel_achievement_pct = {}
+    manual_order_volume_kg = {}
+    releasable_cold_inventory_mt = 0.0
+    if order_scenario_mode == "Channel Achievement %":
+        for channel_label in planned_channel_volume_kg:
+            channel_achievement_pct[channel_label] = st.number_input(f"{channel_label} Achievement %", min_value=float(0.0), max_value=float(200.0), value=float(100.0), step=float(5.0), key=f"order_achievement_{channel_label}")
+        releasable_cold_inventory_mt = st.number_input("Releasable Cold Inventory (MT)", min_value=float(0.0), value=float(0.0), step=float(0.5), key="order_releasable_cold_inventory_mt_pct")
+    elif order_scenario_mode == "Manual Order Volume":
+        for channel_label, planned_volume in planned_channel_volume_kg.items():
+            planned_volume_day = planned_volume / max(1, working_days)
+            manual_order_volume_kg[channel_label] = st.number_input(f"{channel_label} Scenario Orders kg/day", min_value=float(0.0), value=float(planned_volume_day), step=float(100.0), key=f"manual_order_{channel_label}")
+        releasable_cold_inventory_mt = st.number_input("Releasable Cold Inventory (MT)", min_value=float(0.0), value=float(0.0), step=float(0.5), key="order_releasable_cold_inventory_mt_manual")
+
+order_capacity_intelligence = build_order_capacity_intelligence(
+    raw_material_output=raw_material_output,
+    plant_capacity_output=plant_capacity_output,
+    channel_sales_output=channel_sales_output,
+    order_registry=order_registry,
+    plant_id=selected_plant_id,
+    operating_mode="PLANNING",
+    available_finished_goods_inventory_kg=0.0,
+    committed_production_kg=0.0,
+    persistence_days=1,
+    average_bird_weight_kg=avg_bird_weight,
+    scenario_mode=order_scenario_mode,
+    channel_achievement_pct=channel_achievement_pct,
+    manual_order_volume_kg=manual_order_volume_kg,
+    releasable_cold_inventory_mt=releasable_cold_inventory_mt,
+    current_marketing_spend=results.get("marketing_cost", 0.0),
+    gross_contribution_pct=(results.get("gross_contribution", 0.0) / revenue_rupees if revenue_rupees else 0.0),
+)
+manpower_output = align_manpower_sales(manpower_output, channel_sales_output)
+corporate_manpower = manpower_output["total_employees"]
+manpower_role_keys = [
+    "production",
+    "warehouse",
+    "sales",
+    "marketing",
+    "finance",
+    "hr",
+    "admin",
+    "qa_food_safety",
+    "procurement",
+]
+manpower_role_total = sum(int(manpower_output.get(key, 0) or 0) for key in manpower_role_keys)
+if manpower_role_total != manpower_output["total_employees"]:
+    st.warning("Corporate Manpower total was out of sync with the displayed manpower roles. Using final consolidated manpower total as source of truth.")
+if corporate_manpower != manpower_output["total_employees"]:
+    st.warning("Corporate Manpower differed from the final Manpower Planning total. Using final consolidated manpower total as source of truth.")
+    corporate_manpower = manpower_output["total_employees"]
+net_yield = results["weighted_yield"]
+finished_goods_kg = results["finished_goods_kg"]
+live_weight_kg = results["live_bird_kg"]
+birds_required = results["birds_required"]
+birds_per_day = results["birds_per_day"]
+traders_required = max(1, math.ceil(birds_required / avg_trader_capacity)) if avg_trader_capacity else 1
+farms_required = max(1, math.ceil(birds_required / avg_farm_capacity)) if avg_farm_capacity else 1
+production_lines = plant_capacity_output["production_lines_required"]
+employees = manpower_output["total_employees"]
+warehouse_need = results["warehouse_need"]
+distribution_centre_need = results["distribution_centre_need"]
+procurement_spend = results["bird_procurement_cost"] + results["processing_expense"] + results["packaging_expense"]
+trader_margin_cost = procurement_spend * (trader_margin_pct / 100.0)
+farm_margin_cost = procurement_spend * (farm_margin_pct / 100.0)
+gross_contribution = results["gross_contribution"]
+marketing_spend = results["marketing_cost"]
+warehouse_opex = results["warehouse_opex"]
+ebitda = results["ebitda"]
+pat = results["pat"]
+working_capital = results["working_capital"]
+capex = production_lines * stage["capex_per_line"]
+
+
+def render_corporate_manpower_drilldown():
+    st.write("This is the total workforce required for the current corporate and plant plan.")
+    st.dataframe(pd.DataFrame([
+        {"Team": "Production", "Headcount": manpower_output["production"]},
+        {"Team": "Warehouse + Cold Room", "Headcount": manpower_output["warehouse"]},
+        {"Team": "Sales", "Headcount": manpower_output["sales"]},
+        {"Team": "Marketing", "Headcount": manpower_output["marketing"]},
+        {"Team": "Finance", "Headcount": manpower_output["finance"]},
+        {"Team": "HR", "Headcount": manpower_output["hr"]},
+        {"Team": "Admin", "Headcount": manpower_output["admin"]},
+        {"Team": "QA / Food Safety", "Headcount": manpower_output["qa_food_safety"]},
+        {"Team": "Procurement", "Headcount": manpower_output["procurement"]},
+        {"Team": "Total Employees", "Headcount": manpower_output["total_employees"]},
+    ]), hide_index=True, use_container_width=True)
+    st.write("If multiple plants are added later:")
+    st.write("Corporate Manpower = sum of plant manpower minus shared corporate manpower and shared roles already consolidated.")
+
+
+def show_corporate_manpower_drilldown():
+    if hasattr(st, "dialog"):
+        @st.dialog("Corporate Manpower")
+        def _corporate_manpower_dialog():
+            render_corporate_manpower_drilldown()
+
+        _corporate_manpower_dialog()
+    else:
+        with st.expander("Corporate Manpower", expanded=True):
+            render_corporate_manpower_drilldown()
+
+
+st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-title'>Corporate Summary</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-subtitle'>Executive snapshot of revenue, demand, capacity and staffing.</div>", unsafe_allow_html=True)
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    render_kpi_card("Corporate Revenue", fmt_currency(corporate_plant_revenue), subtitle="Monthly Revenue", icon_key="corporate_revenue")
+with col2:
+    render_kpi_card("Corporate Birds / Day", fmt_birds(corporate_birds_day, "day"), subtitle="Across All Active Markets", icon_key="corporate_birds_day")
+with col3:
+    render_kpi_card("Corporate Capacity", f"{corporate_capacity_mt_day:,.1f} MT/day", subtitle="Installed Capacity", icon_key="corporate_capacity")
+with col4:
+    render_kpi_card("Corporate Manpower", f"{corporate_manpower:,.0f}", subtitle="Total Employees", icon_key="corporate_manpower", button_label="View team mix", key="corporate_manpower_drilldown", button_action=show_corporate_manpower_drilldown)
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-title'>Channel Business Ownership</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-subtitle'>Revenue ownership and accountable commercial leadership by channel.</div>", unsafe_allow_html=True)
+commercial_reconciliation_gap = float(channel_sales_output.get("reconciliation_gap", 0.0) or 0.0)
+total_commercial_revenue_display = float(channel_sales_output.get("total_commercial_revenue", selected_market_revenue) or selected_market_revenue)
+summary_subtitle = "Fully reconciled to selected market revenue"
+if abs(commercial_reconciliation_gap) > 1.0:
+    summary_subtitle = f"Revenue Reconciliation Gap: {fmt_currency(abs(commercial_reconciliation_gap))}"
+render_kpi_card(
+    "Total Commercial Revenue",
+    fmt_currency(total_commercial_revenue_display),
+    subtitle=summary_subtitle,
+    status=None if abs(commercial_reconciliation_gap) <= 1.0 else "Revenue Reconciliation Gap",
+    status_type="pbos-status-warn",
+    icon_key="total_commercial_revenue",
+)
+
+own_col1, own_col2, own_col3, own_col4 = st.columns(4)
+with own_col1:
+    render_kpi_card(
+        "Sales Manager / Head of Sales",
+        fmt_currency(total_commercial_revenue_display),
+        subtitle=f"Required HC: {channel_sales_output['sales_manager']:,.0f} | Owns all channel verticals",
+        icon_key="sales_manager",
+        button_label="View details",
+        key="channel_sales_manager",
+        button_action=lambda: show_distributor_channel_drilldown("Sales Manager"),
+    )
+with own_col2:
+    render_kpi_card(
+        "General Trade",
+        fmt_currency(channel_sales_output["general_trade"]["revenue"]),
+        subtitle=f"Required HC: {channel_sales_output['gt_sales_executives']:,.0f} | Distributor and outlet execution",
+        icon_key="general_trade",
+        button_label="View details",
+        key="channel_gt",
+        button_action=lambda: show_distributor_channel_drilldown("GT Sales Executives"),
+    )
+with own_col3:
+    render_kpi_card(
+        "Modern Trade",
+        fmt_currency(channel_sales_output["modern_trade"]["revenue"]),
+        subtitle=f"Required HC: {channel_sales_output['mt_kam']:,.0f} | Chain and account ownership",
+        icon_key="modern_trade",
+        button_label="View details",
+        key="channel_mt_kam",
+        button_action=lambda: show_distributor_channel_drilldown("MT KAM"),
+    )
+with own_col4:
+    render_kpi_card(
+        "Quick Commerce",
+        fmt_currency(channel_sales_output["quick_commerce"]["revenue"]),
+        subtitle=f"Required HC: {channel_sales_output['qcom_kam']:,.0f} | Platform and buying-account ownership",
+        icon_key="quick_commerce",
+        button_label="View details",
+        key="channel_qcom_kam",
+        button_action=lambda: show_distributor_channel_drilldown("QCom KAM"),
+    )
+
+own_col5, own_col6, own_col7, own_col8 = st.columns(4)
+with own_col5:
+    render_kpi_card(
+        "E-commerce",
+        fmt_currency(channel_sales_output.get("ecommerce", {}).get("revenue", channel_sales_output.get("ecommerce_revenue", 0.0))),
+        subtitle=f"Required HC: {channel_sales_output.get('ecommerce_kam', 0):,.0f} | Digital commerce ownership",
+        icon_key="ecommerce",
+    )
+with own_col6:
+    render_kpi_card(
+        "Exports",
+        fmt_currency(channel_sales_output.get("exports", {}).get("revenue", channel_sales_output.get("exports_revenue", 0.0))),
+        subtitle=f"Required HC: {channel_sales_output.get('exports_manager', 0):,.0f} | Export commercial ownership",
+        icon_key="exports",
+    )
+with own_col7:
+    render_kpi_card(
+        "HoReCa",
+        fmt_currency(channel_sales_output["horeca"].get("planned_revenue", channel_sales_output["horeca"]["revenue"])),
+        subtitle=f"Rate/kg: ₹{channel_sales_output['horeca']['contract_rate_per_kg']:,.0f} | Required volume: {channel_sales_output['horeca']['required_volume_kg_month']:,.0f} kg | HC: {channel_sales_output['horeca_sales_hc']:,.0f}",
+        icon_key="horeca",
+        button_label="View details",
+        key="channel_horeca_sales",
+        button_action=lambda: show_distributor_channel_drilldown("HoReCa Revenue"),
+    )
+with own_col8:
+    render_kpi_card(
+        "Institutional / Government",
+        fmt_currency(channel_sales_output["institution"].get("planned_revenue", channel_sales_output["institution"]["revenue"])),
+        subtitle=f"Rate/kg: ₹{channel_sales_output['institution']['contract_rate_per_kg']:,.0f} | Volume: {channel_sales_output['institution']['required_volume_kg_month']:,.0f} kg | Packs: {channel_sales_output['institution']['institutional_required_packs_month']:,.0f} | HC: {channel_sales_output['institution_government_manager']:,.0f}",
+        icon_key="institutional_government",
+        button_label="View details",
+        key="channel_inst_gov",
+        button_action=lambda: show_distributor_channel_drilldown("Institutional / Government Revenue"),
+    )
+
+own_col9 = st.columns(1)[0]
+with own_col9:
+    render_kpi_card(
+        "Total Commercial HC",
+        f"{channel_sales_output['total_commercial_hc']:,.0f}",
+        subtitle="Total commercial manpower",
+        icon_key="sales_hc",
+        button_label="View details",
+        key="channel_total_commercial",
+        button_action=lambda: show_distributor_channel_drilldown("Total Commercial HC"),
+    )
+st.markdown("</div>", unsafe_allow_html=True)
+
+if channel_sales_output.get("reconciliation_warning"):
+    st.error(channel_sales_output["reconciliation_warning"])
+if channel_sales_output["horeca"]["revenue_mode"] != "PLANNING" and abs(channel_sales_output["horeca"]["reconciliation_variance"]) > 0:
+    st.warning(f"HoReCa contract revenue differs from channel mix allocation by {fmt_currency(channel_sales_output['horeca']['reconciliation_variance'])}.")
+if channel_sales_output["institution"]["revenue_mode"] != "PLANNING" and abs(channel_sales_output["institution"]["reconciliation_variance"]) > 0:
+    st.warning(f"Institutional / Government contract revenue differs from channel mix allocation by {fmt_currency(channel_sales_output['institution']['reconciliation_variance'])}.")
+
+st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-title'>Market-specific Planning</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-subtitle'>Selected market view with market-only presentation.</div>", unsafe_allow_html=True)
+col5, col6, col7, col8 = st.columns(4)
+with col5:
+    render_kpi_card("Selected Market", selected_market_name, subtitle="Current market focus", icon_key="selected_market")
+with col6:
+    render_kpi_card("Revenue Allocation", fmt_currency(market_revenue_rupees), subtitle="Market allocation", icon_key="revenue_allocation")
+with col7:
+    render_kpi_card("Assigned Plant", selected_plant_name, subtitle="Plant serving this market", icon_key="assigned_plant")
+with col8:
+    if market_distance_km == 0 or selected_market_city.strip().lower() == selected_plant_city.strip().lower():
+        market_status = "Base Market"
+    elif 0 < market_distance_km <= 300:
+        market_status = "Regional Market"
+    else:
+        market_status = "Expansion Market"
+    render_kpi_card("Market Status", market_status, subtitle="Market positioning", icon_key="market_status")
+st.markdown("<div class='pbos-info-banner'>Revenue Share: <b>{:.1f}%</b> | One-way Distance: <b>{:.0f} km</b></div>".format((market_revenue_rupees / corporate_revenue_rupees * 100.0) if corporate_revenue_rupees else 0.0, market_distance_km), unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-title'>Commercial & Distribution Planning</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-subtitle'>Execution capacity and distributor network for commercial delivery.</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:6px;'>A. Distribution Network</div>", unsafe_allow_html=True)
+dcol1, dcol2, dcol3 = st.columns(3)
+with dcol1:
+    distribution_business_card(
+        "Frozen Raw Business",
+        distributor_output["frozen_raw_revenue"],
+        distributor_output["frozen_raw_distributors"],
+        distributor_output["frozen_network_capacity"],
+        distributor_output["frozen_utilization_pct"],
+        distributor_output["frozen_capacity_status"],
+        "dist_frozen_raw_business",
+    )
+with dcol2:
+    distribution_business_card(
+        "RTE Business",
+        distributor_output["rte_revenue"],
+        distributor_output["rte_distributors"],
+        distributor_output["rte_network_capacity"],
+        distributor_output["rte_utilization_pct"],
+        distributor_output["rte_capacity_status"],
+        "dist_rte_business",
+    )
+with dcol3:
+    distribution_business_card(
+        "Shared Frozen + RTE Network",
+        distributor_output["shared_frozen_rte_revenue"],
+        distributor_output["shared_frozen_rte_distributors"],
+        distributor_output["shared_network_capacity"],
+        distributor_output["shared_utilization_pct"],
+        distributor_output["shared_frozen_rte_capacity_status"],
+        "dist_shared_frozen_rte_network",
+    )
+
+st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:10px;'>B. Commercial Execution Capacity</div>", unsafe_allow_html=True)
+exec_col1, exec_col2, exec_col3 = st.columns(3)
+with exec_col1:
+    gt_execution = channel_sales_output["general_trade"]
+    render_kpi_card(
+        "GT Distributor / Outlet Coverage",
+        f"{gt_execution['required_distributors']:,.0f} distributors",
+        subtitle=f"{gt_execution['target_outlets']:,.0f} target outlets | {gt_execution['outlets_per_distributor']:,.0f} outlets/distributor",
+        status=gt_execution["coverage_status"],
+        status_type="pbos-status-neutral",
+        icon_key="general_trade",
+        button_label="View details",
+        key="commercial_exec_gt",
+        button_action=lambda: show_distributor_channel_drilldown("GT Sales Executives"),
+    )
+with exec_col2:
+    render_kpi_card(
+        "MT Accounts",
+        f"{channel_sales_output['modern_trade']['accounts']:,.0f}",
+        subtitle="Modern Trade accounts",
+        icon_key="modern_trade",
+        button_label="View details",
+        key="commercial_exec_mt",
+        button_action=lambda: show_distributor_channel_drilldown("MT KAM"),
+    )
+with exec_col3:
+    render_kpi_card(
+        "Quick Commerce Platforms",
+        f"{channel_sales_output['quick_commerce']['active_platforms']:,.0f}",
+        subtitle=f"{channel_sales_output['quick_commerce']['buying_accounts']:,.0f} buying accounts | {channel_sales_output['quick_commerce']['buying_regions']:,.0f} buying regions",
+        icon_key="quick_commerce",
+        button_label="View details",
+        key="commercial_exec_qcom",
+        button_action=lambda: show_distributor_channel_drilldown("QCom KAM"),
+    )
+
+exec_col4, exec_col5, exec_col6 = st.columns(3)
+with exec_col4:
+    render_kpi_card(
+        "HoReCa Active Contracts / Accounts",
+        f"{channel_sales_output['horeca']['accounts']:,.0f}",
+        subtitle="HoReCa active contracts and accounts",
+        icon_key="horeca",
+        button_label="View details",
+        key="commercial_exec_horeca",
+        button_action=lambda: show_distributor_channel_drilldown("HoReCa Revenue"),
+    )
+with exec_col5:
+    render_kpi_card(
+        "Institutional Tenders / Rate Contracts",
+        f"{channel_sales_output['institution']['accounts']:,.0f}",
+        subtitle="Institutional and government tenders",
+        icon_key="institutional_government",
+        button_label="View details",
+        key="commercial_exec_inst",
+        button_action=lambda: show_distributor_channel_drilldown("Institutional / Government Revenue"),
+    )
+with exec_col6:
+    render_kpi_card(
+        "Total Commercial HC",
+        f"{channel_sales_output['total_commercial_hc']:,.0f}",
+        subtitle="Total commercial manpower",
+        icon_key="sales_hc",
+        button_label="View details",
+        key="commercial_exec_total_hc",
+        button_action=lambda: show_distributor_channel_drilldown("Total Commercial HC"),
+    )
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-title'>Plant Capacity Planning</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-subtitle'>Capacity required by the plant to support assigned market demand.</div>", unsafe_allow_html=True)
+colp1, colp2, colp3, colp4, colp5, colp6, colp7 = st.columns(7)
+with colp1:
+    plant_kpi_card("Finished Goods / Day", f"{plant_capacity_output['finished_goods_mt_day']:,.1f} MT/day", "plant_kpi_finished_goods", subtitle="Demand output", status=None)
+with colp2:
+    plant_kpi_card("Installed Capacity / Day", f"{plant_capacity_output['installed_capacity_mt_day']:,.1f} MT/day", "plant_kpi_installed_capacity", subtitle="Current installed capacity")
+with colp3:
+    plant_kpi_card("Production Lines", f"{plant_capacity_output['production_lines_required']:,.0f}", "plant_kpi_lines", subtitle="Required lines")
+with colp4:
+    plant_kpi_card("Shift Requirement", f"{plant_capacity_output['shifts_required']:,.0f}", "plant_kpi_shifts", subtitle="Operating shifts")
+with colp5:
+    plant_kpi_card("Plant Utilization %", f"{plant_capacity_output['plant_utilization_pct']:,.1f}%", "plant_kpi_utilization", subtitle="Capacity load", status="Available Capacity" if plant_capacity_output['plant_utilization_pct'] < 70 else "Healthy" if plant_capacity_output['plant_utilization_pct'] <= 85 else "Expansion Review" if plant_capacity_output['plant_utilization_pct'] <= 100 else "Over Capacity", status_type="pbos-status-positive" if plant_capacity_output['plant_utilization_pct'] < 70 else "pbos-status-warn" if plant_capacity_output['plant_utilization_pct'] <= 85 else "pbos-status-alert")
+with colp6:
+    plant_kpi_card("Cold Storage Required", f"{plant_capacity_output['cold_storage_required_mt']:,.1f} MT", "plant_kpi_cold_storage", subtitle="Buffer stock requirement")
+with colp7:
+    plant_kpi_card("Expansion Required", plant_capacity_output["expansion_required"], "plant_kpi_expansion", subtitle="Capex signal", status=plant_capacity_output["expansion_required"], status_type="pbos-status-alert" if plant_capacity_output["expansion_required"] == "Yes" else "pbos-status-neutral")
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-title'>Raw Material & Procurement Planning</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-subtitle'>Live bird procurement and raw material conversion for the selected market.</div>", unsafe_allow_html=True)
+proc_col1, proc_col2, proc_col3, proc_col4 = st.columns(4)
+with proc_col1:
+    render_kpi_card("Live Bird Rate", fmt_rate_per_kg(live_bird_rate), subtitle="Live sidebar driver", icon_key="live_bird_rate")
+with proc_col2:
+    render_kpi_card("Yield", f"{yield_pct:,.1f}%", subtitle="Conversion efficiency", icon_key="yield")
+with proc_col3:
+    render_kpi_card("Birds / Day", fmt_birds(birds_per_day, "day"), subtitle="Live bird demand", icon_key="birds_day")
+with proc_col4:
+    render_kpi_card("Live Weight / Day", f"{live_weight_kg / working_days:,.0f} kg", subtitle="Daily live weight", icon_key="live_weight_day")
+proc_col5, proc_col6, proc_col7 = st.columns(3)
+with proc_col5:
+    render_kpi_card("Procurement Spend / Month", fmt_currency(procurement_spend), subtitle="Bird + processing + packing", icon_key="procurement_spend")
+with proc_col6:
+    render_kpi_card("Traders Required", f"{traders_required:,.0f}", subtitle="Supply sourcing support", icon_key="traders_required")
+with proc_col7:
+    render_kpi_card("Farms Required", f"{farms_required:,.0f}", subtitle="Supply base support", icon_key="farms_required")
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-title'>Logistics Planning</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-subtitle'>Primary live-bird movement and secondary finished-goods delivery.</div>", unsafe_allow_html=True)
+primary_logistics = logistics_output["primary"]
+secondary_logistics = logistics_output["secondary"]
+st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:6px;'>A. Primary Logistics</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-subtitle'>Live bird sourcing → plant</div>", unsafe_allow_html=True)
+coll1, coll2, coll3, coll4 = st.columns(4)
+with coll1:
+    logistics_kpi_card("Primary Vehicles Required", f"{primary_logistics['vehicles_required']:,.0f}", "logistics_primary_vehicles", subtitle="Primary transport")
+with coll2:
+    logistics_kpi_card("Primary Trips / Day", f"{primary_logistics['trips_day']:,.0f}", "logistics_primary_trips", subtitle="Lifting cadence")
+with coll3:
+    logistics_kpi_card("Primary Cost / Month", fmt_currency(primary_logistics["cost_month"]), "logistics_primary_cost", subtitle="Live bird sourcing")
+with coll4:
+    logistics_kpi_card("Average Primary Distance", f"{average_primary_distance_km:,.0f} km", "logistics_total_cost", subtitle="Sourcing radius")
+
+st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:10px;'>B. Secondary Logistics</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-subtitle'>Plant → market / distributor / customer</div>", unsafe_allow_html=True)
+coll5, coll6, coll7, coll8, coll9 = st.columns(5)
+with coll5:
+    logistics_kpi_card("Secondary Vehicles Required", f"{secondary_logistics['vehicles_required']:,.0f}", "logistics_secondary_vehicles", subtitle="Outbound fleet")
+with coll6:
+    logistics_kpi_card("Secondary Trips / Day", f"{secondary_logistics['trips_day']:,.0f}", "logistics_secondary_trips", subtitle="Delivery frequency")
+with coll7:
+    logistics_kpi_card("Secondary Cost / Month", fmt_currency(secondary_logistics["cost_month"]), "logistics_secondary_cost", subtitle="Channel delivery")
+with coll8:
+    logistics_kpi_card("Cold Chain Required", secondary_logistics["cold_chain_required"], "logistics_cold_chain", subtitle="Cold-chain signal")
+with coll9:
+    logistics_kpi_card("Market Distance", f"{secondary_logistics['market_distance_km']:,.0f} km", "logistics_market_distance", subtitle="Plant to market")
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-title'>Order & Capacity Intelligence</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-subtitle'>Actual order demand compared with planned volume, inventory and plant capacity.</div>", unsafe_allow_html=True)
+order_col1, order_col2, order_col3, order_col4 = st.columns(4)
+with order_col1:
+    render_kpi_card("Scenario Mode", order_capacity_intelligence.get("scenario_mode", "No Scenario"), subtitle="Order scenario", icon_key="scenario_mode")
+with order_col2:
+    render_kpi_card("Order Source", order_capacity_intelligence.get("order_source", "NONE"), subtitle="Planning source", icon_key="order_source")
+with order_col3:
+    render_kpi_card("Planned Demand", f"{order_capacity_intelligence['planned_demand_mt_day']:,.1f} MT/day", subtitle="Channel mix demand", icon_key="planned_demand")
+with order_col4:
+    render_kpi_card("Scenario Order Demand", f"{order_capacity_intelligence['scenario_order_demand_mt_day']:,.1f} MT/day", subtitle="Scenario demand", icon_key="scenario_orders")
+order_col5, order_col6, order_col7, order_col8 = st.columns(4)
+with order_col5:
+    render_kpi_card("Overall Achievement %", f"{order_capacity_intelligence['overall_achievement_pct']:,.1f}%", subtitle="Scenario vs plan", icon_key="achievement")
+with order_col6:
+    render_kpi_card("Available Cold Inventory", f"{order_capacity_intelligence['available_inventory_mt']:,.1f} MT", subtitle="One-time releasable stock", icon_key="available_inventory")
+with order_col7:
+    render_kpi_card("Available Plant Capacity", f"{order_capacity_intelligence['available_plant_capacity_mt_day']:,.1f} MT/day", subtitle="Production capacity", icon_key="available_plant_capacity")
+with order_col8:
+    render_kpi_card("Total Fulfilment Capability", f"{order_capacity_intelligence['total_fulfilment_capability_mt']:,.1f} MT", subtitle="Plant + releasable stock", icon_key="capacity_gap")
+order_col9, order_col10, order_col11, order_col12 = st.columns(4)
+with order_col9:
+    render_kpi_card("Production Required", f"{order_capacity_intelligence['production_required_mt_day']:,.1f} MT/day", subtitle="After inventory release", icon_key="available_plant_capacity")
+with order_col10:
+    render_kpi_card("Capacity Gap / Surplus", f"{order_capacity_intelligence['capacity_gap_mt']:,.1f} MT", subtitle="Supply minus orders", icon_key="capacity_gap")
+with order_col11:
+    render_kpi_card("Scenario Plant Utilization", f"{order_capacity_intelligence['scenario_plant_utilization_pct']:,.1f}%", subtitle="Against installed capacity", icon_key="scenario_plant_utilization")
+with order_col12:
+    capacity_status = order_capacity_intelligence.get("capacity_status", order_capacity_intelligence["status"])
+    capacity_status_label = "Not Simulated" if capacity_status == "NOT_SIMULATED" else capacity_status
+    render_kpi_card("Capacity Status", capacity_status_label, subtitle=order_capacity_intelligence["warning_type"], status=order_capacity_intelligence["persistence_status"], status_type="pbos-status-positive" if capacity_status == "HEALTHY" else "pbos-status-warn", button_label="View details", key="order_capacity_intelligence_details", button_action=show_order_capacity_drilldown, icon_key="capacity_status")
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-title'>Manpower Planning</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-subtitle'>Department-wise staffing for the selected plant and market plan.</div>", unsafe_allow_html=True)
+colm1, colm2, colm3, colm4, colm5 = st.columns(5)
+with colm1:
+    manpower_kpi_card("Production", manpower_output["production"], "manpower_kpi_production", subtitle="Plant execution")
+with colm2:
+    manpower_kpi_card("Warehouse + Cold Room", manpower_output["warehouse"], "manpower_kpi_warehouse", subtitle="Handling and dispatch")
+with colm3:
+    manpower_kpi_card("Sales", manpower_output["sales"], "manpower_kpi_sales", subtitle="Channel execution")
+with colm4:
+    manpower_kpi_card("Marketing", manpower_output["marketing"], "manpower_kpi_marketing", subtitle="Trade and activation")
+with colm5:
+    manpower_kpi_card("Finance", manpower_output["finance"], "manpower_kpi_finance", subtitle="Controls and MIS")
+
+colm6, colm7, colm8, colm9, colm10 = st.columns(5)
+with colm6:
+    manpower_kpi_card("HR", manpower_output["hr"], "manpower_kpi_hr", subtitle="People operations")
+with colm7:
+    manpower_kpi_card("Admin", manpower_output["admin"], "manpower_kpi_admin", subtitle="Site support")
+with colm8:
+    manpower_kpi_card("QA / Food Safety", manpower_output["qa_food_safety"], "manpower_kpi_qa", subtitle="Compliance")
+with colm9:
+    manpower_kpi_card("Procurement", manpower_output["procurement"], "manpower_kpi_procurement", subtitle="Bird sourcing")
+with colm10:
+    manpower_kpi_card("Total Employees", manpower_output["total_employees"], "manpower_kpi_total", subtitle="Overall operating team", status="Overall capacity", status_type="pbos-status-positive")
+if manpower_output.get("staffing_bands"):
+    staffing_rows = []
+    for function_name, band in manpower_output["staffing_bands"].items():
+        staffing_rows.append({
+            "Function": function_name.replace("_", " ").title(),
+            "Current Workload": f"{float(band.get('current_workload', 0.0) or 0.0):,.1f}",
+            "Unit": band.get("workload_unit", ""),
+            "Staffing Band": band.get("current_staffing_band", ""),
+            "Lower Threshold": f"{float(band.get('lower_threshold', 0.0) or 0.0):,.1f}",
+            "Upper Threshold": f"{float(band.get('upper_threshold', 0.0) or 0.0):,.1f}",
+            "Current HC": f"{int(band.get('current_hc', 0) or 0):,.0f}",
+            "Recommended HC": f"{int(band.get('recommended_hc', 0) or 0):,.0f}",
+            "Threshold Status": band.get("threshold_status", ""),
+            "Business Reason": band.get("business_reason", ""),
+        })
+    st.dataframe(pd.DataFrame(staffing_rows), hide_index=True, use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
+
+with st.expander("Reverse Manpower Planning", expanded=False):
+    target_sales_hc = st.number_input("CEO Sales Headcount", min_value=int(1), value=int(manpower_output["sales"]), step=int(1), key="reverse_sales_hc")
+    sales_coverage_pct = min(100.0, target_sales_hc / max(1, manpower_output["sales"]) * 100.0)
+    sales_supported_revenue = selected_plant_result["assigned_market_revenue"] * sales_coverage_pct / 100.0
+    sales_revenue_impact = max(0.0, selected_plant_result["assigned_market_revenue"] - sales_supported_revenue)
+    outlet_coverage_pct = sales_coverage_pct
+    st.write("Sales Reverse Planning")
+    st.write(f"Lower market coverage: {sales_coverage_pct:,.1f}% of planned revenue coverage remains when sales headcount moves from {manpower_output['sales']:,.0f} to {target_sales_hc:,.0f}.")
+    st.write("Slower GT expansion: fewer field reps means fewer new outlets opened and slower repeat-order building.")
+    st.write(f"Lower outlet visits: outlet coverage decreases to {outlet_coverage_pct:,.1f}% because each salesperson carries a defined market coverage load.")
+    st.write(f"Revenue at risk: {fmt_currency(sales_revenue_impact)}.")
+    st.write(f"Expected revenue impact is {fmt_currency(sales_revenue_impact)}.")
+    if target_sales_hc < manpower_output["sales"]:
+        st.warning("Recommendation: reduce the revenue target, improve salesperson productivity, or restore sales coverage before committing the plan.")
+    else:
+        st.success("Recommendation: sales coverage is sufficient for the current revenue ambition.")
+
+    target_production_hc = st.number_input("CEO Production Headcount", min_value=int(1), value=int(manpower_output["production"]), step=int(1), key="reverse_production_hc")
+    max_mt_day_possible = target_production_hc * manpower_output["production_mt_per_person_day"]
+    production_utilization = min(100.0, plant_raw_material_output["finished_goods_mt_day"] / max(0.1, max_mt_day_possible) * 100.0)
+    lost_capacity_mt_day = max(0.0, plant_raw_material_output["finished_goods_mt_day"] - max_mt_day_possible)
+    production_revenue_impact = selected_plant_result["assigned_market_revenue"] * lost_capacity_mt_day / max(0.1, plant_raw_material_output["finished_goods_mt_day"])
+    st.write("Production Reverse Planning")
+    st.write(f"Lower throughput: maximum MT/day possible is {max_mt_day_possible:,.1f} MT/day.")
+    st.write("Overtime risk increases when fewer people have to cover the same production and packing load.")
+    st.write("Quality and sanitation risk increases because cleaning, shift handover, and line discipline get compressed.")
+    st.write(f"Utilization against available production manpower is {production_utilization:,.1f}%.")
+    st.write(f"Lost capacity is {lost_capacity_mt_day:,.1f} MT/day.")
+    st.write(f"Revenue capacity impact is {fmt_currency(production_revenue_impact)}.")
+    if target_production_hc < manpower_output["production"]:
+        st.warning("Recommendation: do not reduce production headcount unless demand is lowered or productivity improves.")
+    else:
+        st.success("Recommendation: production manpower can support the current finished goods plan.")
+
+    target_warehouse_hc = st.number_input("CEO Warehouse + Cold Room Headcount", min_value=int(1), value=int(manpower_output["warehouse"]), step=int(1), key="reverse_warehouse_hc")
+    warehouse_coverage_pct = min(100.0, target_warehouse_hc / max(1, manpower_output["warehouse"]) * 100.0)
+    st.write("Warehouse + Cold Room Reverse Planning")
+    st.write(f"Loading delay risk rises when warehouse coverage drops to {warehouse_coverage_pct:,.1f}% of the planned team.")
+    st.write("Cold room mismatch risk increases because receiving, put-away, picking, and dispatch checks become compressed.")
+    st.write("FEFO and inventory risk increases when fewer people manage batch rotation and stock accuracy.")
+    st.write("Dispatch SLA risk increases because loading and route handover depend on timely cold room execution.")
+    if target_warehouse_hc < manpower_output["warehouse"]:
+        st.warning("Recommendation: keep warehouse and cold room staffing intact unless dispatch frequency or finished goods volume is reduced.")
+    else:
+        st.success("Recommendation: warehouse and cold room staffing can support the current dispatch plan.")
+
+with st.expander("Reverse Distributor and GT Sales Planning", expanded=False):
+    gt = channel_sales_output["general_trade"]
+    target_gt_sales_executives = st.number_input("CEO GT Sales Executives", min_value=int(0), value=int(gt["sales_executives"]), step=int(1), key="reverse_gt_sales_exec")
+    max_gt_revenue_supported = target_gt_sales_executives * gt["revenue_per_sales_executive"]
+    outlet_coverage_supported = target_gt_sales_executives * gt["outlets_per_sales_executive"]
+    calls_supported = target_gt_sales_executives * gt["calls_per_sales_executive_day"]
+    gt_revenue_at_risk = max(0.0, gt["revenue"] - max_gt_revenue_supported)
+    st.write("GT Sales Executives Reverse Planning")
+    st.write(f"Maximum GT revenue supportable: {fmt_currency(max_gt_revenue_supported)}.")
+    st.write(f"Outlet coverage supported: {outlet_coverage_supported:,.0f} outlets.")
+    st.write(f"Calls/day supported: {calls_supported:,.0f}.")
+    st.write(f"Market revenue at risk: {fmt_currency(gt_revenue_at_risk)}.")
+    if target_gt_sales_executives < gt["sales_executives"]:
+        st.warning("Recommendation: reduce GT revenue ambition, improve salesperson productivity, or restore field coverage before committing the plan.")
+    else:
+        st.success("Recommendation: GT sales coverage supports the current market plan.")
+
+    target_mt_kam = st.number_input("CEO MT KAM", min_value=int(0), value=int(channel_sales_output["mt_kam"]), step=int(1), key="reverse_mt_kam")
+    st.write("MT KAM Reverse Planning")
+    if target_mt_kam < channel_sales_output["mt_kam"]:
+        st.warning("Reducing MT ownership creates chain negotiation risk, listing delays, weaker promotion execution, claims backlog, and revenue at risk.")
+    else:
+        st.success("Recommendation: MT account ownership is protected for the current startup plan.")
+
+    target_qcom_kam = st.number_input("CEO QCom KAM", min_value=int(0), value=int(channel_sales_output["qcom_kam"]), step=int(1), key="reverse_qcom_kam")
+    st.write("QCom KAM Reverse Planning")
+    if target_qcom_kam < channel_sales_output["qcom_kam"]:
+        st.warning("Reducing QCom ownership creates platform fill-rate risk, dark-store stock-out risk, slower replenishment, weaker visibility, and revenue at risk.")
+    else:
+        st.success("Recommendation: QCom platform ownership is protected for the current startup plan.")
+
+    target_horeca_sales = st.number_input("CEO HoReCa Sales HC", min_value=int(0), value=int(channel_sales_output["horeca_sales_hc"]), step=int(1), key="reverse_horeca_sales_hc")
+    st.write("HoReCa Sales Reverse Planning")
+    if target_horeca_sales < channel_sales_output["horeca_sales_hc"]:
+        st.warning("Reducing HoReCa sales coverage slows account acquisition, sampling, repeat orders, and payment follow-up.")
+    else:
+        st.success("Recommendation: HoReCa coverage supports acquisition and repeat-order building.")
+
+    target_inst_gov_manager = st.number_input("CEO Institutional / Government Manager", min_value=int(0), value=int(channel_sales_output["institution_government_manager"]), step=int(1), key="reverse_inst_gov_manager")
+    st.write("Institutional / Government Reverse Planning")
+    if target_inst_gov_manager < channel_sales_output["institution_government_manager"]:
+        st.warning("Reducing this role creates tender ownership risk, slower government opportunity conversion, weaker documentation follow-up, and payment risk.")
+    else:
+        st.success("Recommendation: institutional and government ownership supports tenders, rate contracts, and collections follow-up.")
+
+    distributor_choice = st.selectbox("Distributor Type", ["Frozen Raw", "RTE", "Shared Frozen + RTE"], key="reverse_distributor_type")
+    distributor_map = {
+        "Frozen Raw": ("frozen_raw_revenue", "frozen_raw_distributors", "frozen_revenue_capacity_per_distributor"),
+        "RTE": ("rte_revenue", "rte_distributors", "rte_revenue_per_distributor"),
+        "Shared Frozen + RTE": ("shared_frozen_rte_revenue", "shared_frozen_rte_distributors", "shared_frozen_rte_revenue_per_distributor"),
+    }
+    revenue_key, count_key, capacity_key = distributor_map[distributor_choice]
+    target_distributors = st.number_input("CEO Distributor Count", min_value=int(0), value=int(distributor_output[count_key]), step=int(1), key="reverse_distributor_count")
+    distributor_capacity = target_distributors * distributor_output[capacity_key]
+    overload_value = max(0.0, distributor_output[revenue_key] - distributor_capacity)
+    st.write("Distributor Reverse Planning")
+    st.write(f"Revenue capacity per distributor: {fmt_currency(distributor_output[capacity_key])}.")
+    st.write(f"Overloaded distributor capacity: {fmt_currency(overload_value)}.")
+    st.write("Service frequency risk increases if planned revenue is forced through fewer distributors.")
+    st.write("Cold-chain risk increases when distributor capacity is overloaded.")
+    if target_distributors < distributor_output[count_key]:
+        st.warning("Recommendation: do not reduce distributor count unless revenue, service frequency, or delivery geography is reduced.")
+    else:
+        st.success("Recommendation: distributor capacity supports the current market plan.")
+
+st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-title'>Financial Planning</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-subtitle'>Revenue bridge from procurement to EBITDA and PAT.</div>", unsafe_allow_html=True)
+chain_cols = st.columns(5)
+with chain_cols[0]:
+    render_kpi_card("Revenue", fmt_currency(revenue_rupees), subtitle="Starting point", icon_key="revenue")
+with chain_cols[1]:
+    render_kpi_card("Procurement Spend", fmt_currency(procurement_spend), subtitle="Less spend", icon_key="procurement_spend")
+with chain_cols[2]:
+    render_kpi_card("Gross Contribution", fmt_currency(gross_contribution), subtitle="Gross contribution", icon_key="gross_contribution", value_class="negative" if gross_contribution < 0 else None)
+with chain_cols[3]:
+    render_kpi_card("EBITDA", fmt_currency(ebitda), subtitle="Operating profit", icon_key="ebitda", value_class="negative" if ebitda < 0 else None)
+with chain_cols[4]:
+    render_kpi_card("PAT", fmt_currency(pat), subtitle="Net profit", icon_key="pat", value_class="negative" if pat < 0 else None)
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-title'>CEO Recommendation</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-subtitle'>Concise executive view for the current operating plan.</div>", unsafe_allow_html=True)
+horeca_pricing = channel_sales_output.get("horeca", {})
+st.write(f"The selected plant {selected_plant_name} is supporting {selected_market_name} with a plant utilization of {plant_capacity_output['plant_utilization_pct']:,.1f}%.")
+st.write(f"Revenue opportunity is {fmt_currency(revenue_rupees)} with procurement spend at {fmt_currency(procurement_spend)} and gross contribution of {fmt_currency(gross_contribution)}.")
+st.write(f"At a live-bird rate of ₹{horeca_pricing.get('live_bird_rate', live_bird_rate):,.0f}/kg, the estimated total operating cost is ₹{horeca_pricing.get('total_cost_per_kg', 0.0):,.0f}/kg. PBOS recommends a HoReCa and Institutional contract rate of approximately ₹{horeca_pricing.get('recommended_selling_price_per_kg', 0.0):,.0f}/kg to protect a {horeca_pricing.get('target_margin_pct', 15.0):,.0f}% gross margin.")
+st.write(f"Achieved margin is {horeca_pricing.get('actual_margin_pct', 0.0):,.1f}% and pricing status is {horeca_pricing.get('pricing_status', 'N/A')}. Live-bird price movement directly changes raw material cost, recommended contract price, channel revenue allocation, and contribution.")
+st.write(f"The current recommendation remains to monitor utilization, preserve cold-chain readiness, and keep staffing aligned with the revenue plan.")
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.caption(f"Current stage: {business_stage}. {stage['automation_note']}")
+

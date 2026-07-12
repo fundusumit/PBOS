@@ -1,0 +1,5 @@
+product_id,product_name,category,default_mix_percent,selling_price_per_kg,bird_yield_percent,procurement_cost_per_kg,processing_cost_per_kg,packaging_cost_per_kg,cold_storage_cost_per_kg,distribution_cost_per_kg,marketing_percent,expected_margin_percent,labour_factor,automation_factor,working_capital_days
+FRESH,Fresh Chilled,Fresh,40,240,72,180,12,18,8,7,0.02,0.18,1.0,0.7,22
+FROZEN,Frozen Raw,Frozen,30,210,68,170,10,16,10,6,0.015,0.16,0.9,0.8,24
+RTE,Ready To Eat,RTE,15,300,70,190,20,24,12,9,0.025,0.22,1.2,0.6,26
+FVA,Further Value Added,FVA,15,330,66,200,25,28,14,10,0.03,0.24,1.4,0.5,28

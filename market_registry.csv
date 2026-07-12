@@ -1,0 +1,6 @@
+market_id,country,state,city,distance_km,transit_time,preferred_transport,estimated_logistics_cost,warehouse_required,distribution_center_required,estimated_break_even_revenue,remarks,assigned_plant_id
+MKT001,India,West Bengal,Kolkata,0,4,Road,0.8,No,No,120000000,Base servicing hub.,PLANT_KOL
+MKT002,India,Assam,Guwahati,600,22,Road,1.5,Yes,Yes,240000000,Long-haul market requiring stronger distribution support.,PLANT_KOL
+MKT003,India,Odisha,Bhubaneswar,450,16,Road,1.2,No,Yes,180000000,Regional demand center with moderate support need.,PLANT_KOL
+MKT004,India,Bihar,Patna,600,20,Rail,1.3,No,Yes,200000000,Balanced route with rail as preferred mode.,PLANT_KOL
+MKT005,India,Chhattisgarh,Raipur,700,24,Road,1.4,No,Yes,220000000,Needs warehouse support above medium scale.,PLANT_KOL

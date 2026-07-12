@@ -1,0 +1,14 @@
+cost_item,value
+bird rate,180
+packaging,18
+processing,12
+salary,700000
+electricity,3000000
+fuel,1000000
+rent,2000000
+maintenance,1000000
+interest,0.12
+tax,0.25
+warehouse,3000000
+cold chain,1000000
+depreciation_pct,0.05

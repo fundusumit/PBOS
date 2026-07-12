@@ -1,0 +1,6 @@
+logic_id,business_area,description,formula,assumption_keys,used_by
+L001,Revenue,"Revenue is driven by the selected market allocation and selling price.","Revenue = Market Allocation × ASP","ASP_KG;Revenue Allocation",Revenue
+L002,Bird Requirement,"Bird requirement is driven by revenue, yield and bird weight.","Birds/Day = Revenue / ASP / Yield / Bird Weight","ASP_KG;YIELD_PCT;AVG_BIRD_WEIGHT;Revenue Allocation",Bird Requirement
+L003,Sales Team,"Sales team is sized by channel mix and revenue contribution.","Sales Team = GT + MT + QC + HoReCa + Institution","General Trade;Modern Trade;Quick Commerce;HoReCa;Institution",Sales Team
+L004,Employees,"Employees are driven by production lines and the operating stage.","Employees = Production + Warehouse + Sales + Finance + HR + Admin + Marketing","Business Stage;Automation;Production Lines",Employees
+L005,Marketing,"Marketing spend scales with market revenue and sales intensity.","Marketing Spend = Revenue × 2%","Revenue Allocation;Channel Mix",Marketing

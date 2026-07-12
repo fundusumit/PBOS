@@ -1,0 +1,14 @@
+assumption_id,category,parameter,value,unit,source,editable,description
+ASP_KG,Revenue,Average Selling Price/kg,240,₹/kg,Strategy Driver,Yes,Average selling price assumed for planning.
+AVG_BIRD_WEIGHT,Operations,Average Bird Weight,1.8,kg,Planning Assumption,Yes,Average live bird weight used for conversion.
+YIELD_PCT,Operations,Yield %,72,%,Planning Assumption,Yes,Expected processing yield from live bird to finished goods.
+AVG_BIRDS_PER_FARM,Supply Chain,Average Birds per Farm,50000,Birds,Planning Assumption,Yes,Typical sourcing capacity per farm.
+AVG_BIRDS_PER_TRADER,Supply Chain,Average Birds per Trader,20000,Birds,Planning Assumption,Yes,Typical sourcing capacity per trader.
+EMP_PER_PROD_LINE,People,Employees per Production Line,45,HC,Planning Assumption,Yes,Average headcount required per production line.
+PROD_LINE_CAPACITY,Capacity,Production Line Capacity,75,MT/month,Planning Assumption,Yes,Monthly output capacity per production line.
+COLD_STORAGE_DAYS,Logistics,Cold Storage Days,7,Days,Planning Assumption,Yes,Typical storage duration for finished goods.
+REEFER_CAPACITY,Logistics,Reefer Truck Capacity,12,MT,Planning Assumption,Yes,Typical reefer truck payload capacity.
+WC_PCT,Finance,Working Capital %,22,%,Planning Assumption,Yes,Working capital requirement as a percent of revenue.
+EBITDA_MARGIN_PCT,Finance,EBITDA Margin %,18,%,Planning Assumption,Yes,Assumed EBITDA margin for planning.
+PAT_MARGIN_PCT,Finance,PAT Margin %,10,%,Planning Assumption,Yes,Assumed PAT margin for planning.
+CAPEX_PER_PROD_LINE,Finance,CAPEX per Production Line,50000000,₹,Planning Assumption,Yes,Estimated capex for each incremental production line.

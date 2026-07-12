@@ -1,0 +1,2 @@
+plant_id,plant_name,city,state,status,production_mode,installed_capacity_mt_day,line_capacity_mt_day,maximum_shifts,cold_storage_capacity_mt,served_markets,is_default
+PLANT_KOL,Kolkata Plant,Kolkata,West Bengal,Active,Semi Automatic,10,10,3,30,Kolkata|Guwahati|Patna|Bhubaneswar,Yes
