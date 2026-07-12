@@ -2,6 +2,7 @@ import math
 import os
 import sys
 from datetime import date
+from html import escape
 import pandas as pd
 import streamlit as st
 
@@ -39,6 +40,7 @@ st.markdown("""
     flex-wrap: wrap;
     gap: 8px;
     margin-top: 2px;
+    align-items: center;
 }
 .pbos-meta-chip {
     display: inline-block;
@@ -60,8 +62,21 @@ st.markdown("""
     line-height: 1.3;
     margin-left: 4px;
 }
+.pbos-page-creator {
+    margin-left: auto;
+    color: #9db1c6;
+    font-size: 0.72rem;
+    text-align: right;
+}
+.pbos-top-controls {
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+    padding-top: 6px;
+}
 .pbos-top-controls .stButton > button {
-    width: 100%;
+    width: auto;
+    min-width: 120px;
     border-radius: 10px;
     border: 1px solid #c8d2e0;
     background: #ffffff;
@@ -222,6 +237,34 @@ st.markdown("""
     color: #2d5b88;
     text-decoration: none;
 }
+.pbos-table-wrap {
+    border: 1px solid #dbe3ee;
+    border-radius: 12px;
+    overflow-x: auto;
+    margin-top: 10px;
+}
+.pbos-table-wrap table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 0.8rem;
+}
+.pbos-table-wrap th {
+    background: #f6f9fc;
+    color: #334155;
+    font-weight: 700;
+    text-align: left;
+    border-bottom: 1px solid #dbe3ee;
+    padding: 8px;
+}
+.pbos-table-wrap td {
+    border-top: 1px solid #eef2f7;
+    padding: 8px;
+    vertical-align: top;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
 @media (max-width: 900px) {
     .pbos-page-header {
         padding: 12px 14px;
@@ -244,8 +287,6 @@ def show_about_pbos():
             st.write("Version 1.0 MVP")
             st.write("Created by:")
             st.write("Sumit Kumar Mukherjee")
-            st.write("Role:")
-            st.write("Founder & Product Architect")
             st.write("Purpose:")
             st.write("PBOS is a scenario-based business planning platform for poultry and food manufacturing operations. It connects revenue planning with channel ownership, plant capacity, raw-material requirement, logistics, manpower and financial impact.")
             st.write("Current status:")
@@ -261,7 +302,52 @@ def show_about_pbos():
             st.markdown("### PBOS — Business Planning Operating System")
             st.write("Version 1.0 MVP")
             st.write("Created by: Sumit Kumar Mukherjee")
-            st.write("Role: Founder & Product Architect")
+
+
+def render_staffing_bands_table(staffing_df):
+    if staffing_df.empty:
+        return
+    columns = [
+        "Function",
+        "Current Workload",
+        "Unit",
+        "Staffing Band",
+        "Lower Threshold",
+        "Upper Threshold",
+        "Current HC",
+        "Recommended HC",
+        "Threshold Status",
+        "Business Reason",
+    ]
+    col_widths = {
+        "Function": "10%",
+        "Current Workload": "8%",
+        "Unit": "7%",
+        "Staffing Band": "10%",
+        "Lower Threshold": "8%",
+        "Upper Threshold": "8%",
+        "Current HC": "7%",
+        "Recommended HC": "8%",
+        "Threshold Status": "10%",
+        "Business Reason": "24%",
+    }
+    rows_html = []
+    for _, row in staffing_df.iterrows():
+        cells = "".join(f"<td>{escape(str(row.get(col, '')))}</td>" for col in columns)
+        rows_html.append(f"<tr>{cells}</tr>")
+
+    header_html = "".join(f"<th>{escape(col)}</th>" for col in columns)
+    colgroup_html = "".join(f"<col style='width:{col_widths[col]};'>" for col in columns)
+    table_html = f"""
+    <div class='pbos-table-wrap'>
+      <table>
+        <colgroup>{colgroup_html}</colgroup>
+        <thead><tr>{header_html}</tr></thead>
+        <tbody>{''.join(rows_html)}</tbody>
+      </table>
+    </div>
+    """
+    st.markdown(table_html, unsafe_allow_html=True)
 
 
 hero_left, hero_right = st.columns([0.84, 0.16])
@@ -272,9 +358,8 @@ with hero_left:
       <div class="pbos-page-subtitle">Scenario-based planning for revenue, channels, plant capacity, procurement, logistics, manpower and profitability.</div>
       <div class="pbos-page-meta">
         <span class="pbos-meta-chip">Version 1.0 MVP</span>
-        <span class="pbos-meta-chip">Created by Sumit Kumar Mukherjee</span>
-        <span class="pbos-meta-chip">Founder & Product Architect</span>
         <span class="pbos-status-chip">Public Planning Prototype</span>
+                <span class="pbos-page-creator">Created by Sumit Kumar Mukherjee</span>
       </div>
     </div>
     """, unsafe_allow_html=True)
@@ -2370,7 +2455,7 @@ if manpower_output.get("staffing_bands"):
         })
     staffing_df = pd.DataFrame(staffing_rows)
     log_dataframe_shape("manpower_staffing_bands", staffing_df)
-    st.dataframe(staffing_df, hide_index=True, width="stretch")
+    render_staffing_bands_table(staffing_df)
 st.markdown("</div>", unsafe_allow_html=True)
 log_section_end("Manpower Planning")
 
@@ -2530,7 +2615,6 @@ st.markdown(
             <div><b>PBOS — Business Planning Operating System</b></div>
             <div>Version 1.0 MVP</div>
             <div>Created by Sumit Kumar Mukherjee</div>
-            <div>Founder & Product Architect</div>
             <div>© 2026 Sumit Kumar Mukherjee</div>
             <div>Live Demo: <a href='https://pbos-business-planning.streamlit.app' target='_blank'>https://pbos-business-planning.streamlit.app</a></div>
             <div>GitHub: <a href='https://github.com/fundusumit/PBOS' target='_blank'>https://github.com/fundusumit/PBOS</a></div>
