@@ -7,7 +7,7 @@ import streamlit as st
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from calculation_engine import align_manpower_sales, build_channel_sales_output, build_contract_pricing_output, build_distributor_output, build_explainability, build_financial_chain, build_logistics_output, build_order_capacity_intelligence, build_plant_planning
-from runtime_diagnostics import get_runtime_environment, log_dataframe_shape, log_runtime_event, log_section_end, log_section_start
+from runtime_diagnostics import get_runtime_environment, log_dataframe_shape, log_runtime_event, log_section_end, log_section_start, render_display_dataframe, render_display_editor
 
 st.set_page_config(page_title="PBOS — Business Planning Operating System", page_icon="📊", layout="wide")
 log_runtime_event("page_start", **get_runtime_environment())
@@ -608,9 +608,9 @@ def render_manpower_drilldown(kpi_name):
     st.markdown("**Role Split**")
     split_rows = role_splits.get(role_key, [])
     if split_rows:
-        st.dataframe(pd.DataFrame(split_rows), hide_index=True, width="stretch")
+        render_display_dataframe(st, f"manpower_role_split_{role_key}", pd.DataFrame(split_rows), hide_index=True, width="stretch")
     else:
-        st.dataframe(pd.DataFrame([
+        render_display_dataframe(st, f"manpower_role_split_{role_key}", pd.DataFrame([
             {"role": "Total operating team", "responsibility": "Combined headcount across all functions.", "headcount": headcount}
         ]), hide_index=True, width="stretch")
 
@@ -672,7 +672,7 @@ def render_logistics_drilldown(kpi_name):
         st.write("Required to ensure uninterrupted daily bird lifting for plant production.")
         st.write("How calculated:")
         st.write("Daily live bird weight is matched against vehicle capacity and planned trips per vehicle.")
-        st.dataframe(pd.DataFrame([
+        render_display_dataframe(st, "logistics_primary_detail", pd.DataFrame([
             {"Item": "Plant", "Value": selected_plant_name},
             {"Item": "Birds/day", "Value": f"{primary['birds_per_day']:,.0f}"},
             {"Item": "Average bird weight", "Value": f"{primary['average_bird_weight']:,.2f} kg"},
@@ -691,7 +691,7 @@ def render_logistics_drilldown(kpi_name):
         st.write("Vehicles carrying finished goods from the plant to the selected market, distributor, DC, or customer.")
         st.write("Why:")
         st.write("Required to maintain daily delivery and cold-chain continuity.")
-        st.dataframe(pd.DataFrame([
+        render_display_dataframe(st, "logistics_secondary_detail", pd.DataFrame([
             {"Item": "Selected market", "Value": selected_market_name},
             {"Item": "Finished goods/day", "Value": f"{secondary['finished_goods_mt_day']:,.1f} MT"},
             {"Item": "Market distance", "Value": f"{secondary['market_distance_km']:,.0f} km"},
@@ -738,7 +738,7 @@ def render_order_capacity_drilldown():
     st.write(order_capacity_intelligence.get("scenario_variance_explanation", order_capacity_intelligence.get("demand_variance_explanation", "Scenario demand is aligned with the channel-mix planning baseline.")))
     st.write(order_capacity_intelligence.get("observation_status", "Scenario persistence is simulated and not yet connected to historical daily order history."))
     st.write("Consolidated demand summary")
-    st.dataframe(pd.DataFrame([
+    render_display_dataframe(st, "order_capacity_summary", pd.DataFrame([
         {"Metric": "Planned Demand", "Value": f"{order_capacity_intelligence.get('planned_demand_mt_day', 0.0):,.2f} MT/day"},
         {"Metric": "Scenario Demand", "Value": f"{order_capacity_intelligence.get('scenario_order_demand_mt_day', 0.0):,.2f} MT/day"},
         {"Metric": "Net Variance", "Value": f"{order_capacity_intelligence.get('demand_variance_mt_day', 0.0):+,.2f} MT/day"},
@@ -756,7 +756,7 @@ def render_order_capacity_drilldown():
             "Status": data.get("status", ""),
             "Commercial Comment": data.get("commercial_comment", ""),
         })
-    st.dataframe(pd.DataFrame(channel_rows), hide_index=True, width="stretch")
+    render_display_dataframe(st, "order_capacity_channel_contribution", pd.DataFrame(channel_rows), hide_index=True, width="stretch")
 
     st.write("Recommendation area")
     recommendation_rows = []
@@ -771,11 +771,11 @@ def render_order_capacity_drilldown():
             "Area": label,
             "Recommendation": " ".join(order_capacity_intelligence.get(key, [])),
         })
-    st.dataframe(pd.DataFrame(recommendation_rows), hide_index=True, width="stretch")
+    render_display_dataframe(st, "order_capacity_recommendations", pd.DataFrame(recommendation_rows), hide_index=True, width="stretch")
 
     st.write("Inventory impact")
     inventory = order_capacity_intelligence["inventory_impact"]
-    st.dataframe(pd.DataFrame([
+    render_display_dataframe(st, "order_capacity_inventory_impact", pd.DataFrame([
         {"Item": "Inventory build risk", "Value": f"{inventory['inventory_build_risk_kg']:,.0f} kg"},
         {"Item": "Days of inventory", "Value": f"{inventory['days_of_inventory']:,.1f}"},
         {"Item": "Fresh expiry risk", "Value": inventory["fresh_expiry_risk"]},
@@ -811,7 +811,7 @@ def render_distributor_channel_drilldown(kpi_name):
         name, revenue_key, count_key, partner_capacity_key, network_capacity_key, utilization_key, status_key = distribution_map[kpi_name]
         st.write("What this network owns")
         st.write(f"{name} distribution partners carry the planned business revenue with enough capacity for service frequency, cold-chain discipline, and account follow-up.")
-        st.dataframe(pd.DataFrame([
+        render_display_dataframe(st, f"distribution_{name.lower().replace(' ', '_')}", pd.DataFrame([
             {"Item": "Revenue responsibility", "Value": fmt_currency(distributor_output[revenue_key])},
             {"Item": "Distribution partners", "Value": f"{distributor_output[count_key]:,.0f}"},
             {"Item": "Monthly capacity per partner", "Value": fmt_currency(distributor_output[partner_capacity_key])},
@@ -835,7 +835,7 @@ def render_distributor_channel_drilldown(kpi_name):
         active_distributors = gt.get("active_distributors")
         st.write("What this team owns")
         st.write("General Trade sales executives required to manage distributor-led outlet coverage and beat execution.")
-        st.dataframe(pd.DataFrame([
+        render_display_dataframe(st, "gt_sales_executives_detail", pd.DataFrame([
             {"Item": "GT revenue", "Value": fmt_currency(gt["revenue"])},
             {"Item": "Required distributors", "Value": f"{gt['required_distributors']:,.0f}"},
             {"Item": "Actual active distributors", "Value": "Not Connected" if active_distributors is None else f"{active_distributors:,.0f}"},
@@ -861,7 +861,7 @@ def render_distributor_channel_drilldown(kpi_name):
         data = channel_sales_output["modern_trade"]
         st.write("What this role owns")
         st.write("Modern Trade KAM owns chain negotiation, annual trading terms, listing, promotions, claims, fill rate, store execution, and category reviews.")
-        st.dataframe(pd.DataFrame([
+        render_display_dataframe(st, "mt_kam_detail", pd.DataFrame([
             {"Item": "MT revenue", "Value": fmt_currency(data["revenue"])},
             {"Item": "Accounts", "Value": f"{data['accounts']:,.0f}"},
             {"Item": "KAM required", "Value": f"{data['kam']:,.0f}"},
@@ -876,7 +876,7 @@ def render_distributor_channel_drilldown(kpi_name):
         data = channel_sales_output["quick_commerce"]
         st.write("What this role owns")
         st.write("Quick Commerce KAM owns platform relationships, buying accounts, regional buying teams, assortment, replenishment, platform promotions, visibility, SLA adherence, and near-real-time demand planning.")
-        st.dataframe(pd.DataFrame([
+        render_display_dataframe(st, "qcom_kam_detail", pd.DataFrame([
             {"Item": "Active Platforms", "Value": f"{data['active_platforms']:,.0f}"},
             {"Item": "Buying Accounts", "Value": f"{data['buying_accounts']:,.0f}"},
             {"Item": "Buying Regions", "Value": f"{data['buying_regions']:,.0f}"},
@@ -898,7 +898,7 @@ def render_distributor_channel_drilldown(kpi_name):
         st.write("HoReCa Commercial Planning")
         st.write("HoReCa covers hotels, restaurants, caterers, and cloud kitchens.")
         st.write("Planned revenue is allocated from the selected market target using the HoReCa channel mix. The system-recommended contract rate determines the monthly volume required to achieve that target.")
-        st.dataframe(pd.DataFrame([
+        render_display_dataframe(st, "horeca_revenue_detail", pd.DataFrame([
             {"Item": "Live Bird Rate", "Value": f"{fmt_currency_plain(data['live_bird_rate'], 2)}/kg"},
             {"Item": "Average Live Bird Weight", "Value": f"{data['average_live_bird_weight_kg']:,.2f} kg"},
             {"Item": "Dressed Output", "Value": f"{data['dressed_output_kg']:,.2f} kg"},
@@ -939,7 +939,7 @@ def render_distributor_channel_drilldown(kpi_name):
         st.write("Institutional / Government Commercial Planning")
         st.write("Institutional / Government covers hospitals, railways, military, defence canteens, government departments, tenders, and rate contracts.")
         st.write("Planned revenue is allocated from the selected market target using the Institutional/Government mix. The recommended contract rate determines the awarded volume and number of 2 kg packs required.")
-        st.dataframe(pd.DataFrame([
+        render_display_dataframe(st, "institutional_government_revenue_detail", pd.DataFrame([
             {"Item": "Product", "Value": data["product"]},
             {"Item": "Pack Size", "Value": f"{data['pack_size_kg']:,.0f} kg"},
             {"Item": "Pack Type", "Value": data["pack_type"]},
@@ -983,7 +983,7 @@ def render_distributor_channel_drilldown(kpi_name):
         data = channel_sales_output["horeca"]
         st.write("What this team owns")
         st.write("HoReCa sales owns hotels, restaurants, caterers, cloud kitchens, sampling, pricing closure, repeat orders, and payment follow-up.")
-        st.dataframe(pd.DataFrame([
+        render_display_dataframe(st, "horeca_sales_hc_detail", pd.DataFrame([
             {"Item": "HoReCa Planned Revenue", "Value": fmt_currency(data["planned_revenue"])},
             {"Item": "Active accounts", "Value": f"{data['accounts']:,.0f}"},
             {"Item": "Required HoReCa HC", "Value": f"{data['sales_executives']:,.0f}"},
@@ -1003,7 +1003,7 @@ def render_distributor_channel_drilldown(kpi_name):
         data = channel_sales_output["institutional_government"]
         st.write("What this role owns")
         st.write("Institutional / Government ownership covers hospitals, railways, military, defence canteens, tenders, rate contracts, documentation, and payment follow-up.")
-        st.dataframe(pd.DataFrame([
+        render_display_dataframe(st, "institutional_government_manager_detail", pd.DataFrame([
             {"Item": "Institutional / Government Planned Revenue", "Value": fmt_currency(data["planned_revenue"])},
             {"Item": "Active Tenders / Contracts", "Value": f"{data['active_tenders_contracts']:,.0f}"},
             {"Item": "Required Institutional / Government HC", "Value": f"{data['required_hc']:,.0f}"},
@@ -1038,7 +1038,7 @@ def render_distributor_channel_drilldown(kpi_name):
     if kpi_name == "Sales Coordinator / MIS":
         st.write("What this role owns")
         st.write("Sales Coordinator / MIS supports all commercial divisions operationally through order coordination, reporting, and admin discipline.")
-        st.dataframe(pd.DataFrame([
+        render_display_dataframe(st, "sales_coordinator_mis_detail", pd.DataFrame([
             {"Item": "Total commercial revenue supported", "Value": fmt_currency(channel_sales_output.get("total_commercial_revenue", 0.0))},
             {"Item": "Total markets supported", "Value": f"{channel_sales_output.get('total_markets_supported', 0):,.0f}"},
             {"Item": "Total active accounts supported", "Value": f"{channel_sales_output.get('total_active_accounts_supported', 0):,.0f}"},
@@ -1459,7 +1459,9 @@ with st.expander("Add or Edit Market", expanded=False):
     ]].copy()
     visible_markets = visible_markets.reset_index(drop=True)
     log_dataframe_shape("market_editor", visible_markets)
-    editable_markets = st.data_editor(
+    editable_markets = render_display_editor(
+        st,
+        "market_editor",
         visible_markets,
         num_rows="dynamic",
         hide_index=True,
@@ -1906,7 +1908,7 @@ capex = production_lines * stage["capex_per_line"]
 
 def render_corporate_manpower_drilldown():
     st.write("This is the total workforce required for the current corporate and plant plan.")
-    st.dataframe(pd.DataFrame([
+    render_display_dataframe(st, "corporate_manpower_drilldown", pd.DataFrame([
         {"Team": "Production", "Headcount": manpower_output["production"]},
         {"Team": "Warehouse + Cold Room", "Headcount": manpower_output["warehouse"]},
         {"Team": "Sales", "Headcount": manpower_output["sales"]},
@@ -2369,8 +2371,7 @@ if manpower_output.get("staffing_bands"):
             "Business Reason": band.get("business_reason", ""),
         })
     staffing_df = pd.DataFrame(staffing_rows)
-    log_dataframe_shape("manpower_staffing_bands", staffing_df)
-    st.dataframe(staffing_df, hide_index=True, width="stretch")
+    render_display_dataframe(st, "manpower_staffing_bands", staffing_df, hide_index=True, width="stretch")
 st.markdown("</div>", unsafe_allow_html=True)
 log_section_end("Manpower Planning")
 

@@ -1,4 +1,5 @@
 import gc
+import datetime as _datetime
 import logging
 import os
 import platform
@@ -11,6 +12,11 @@ try:
 except Exception:
     resource = None
 
+try:
+    import pandas as pd
+except Exception:
+    pd = None
+
 
 LOGGER = logging.getLogger("pbos.runtime")
 if not LOGGER.handlers:
@@ -19,6 +25,10 @@ if not LOGGER.handlers:
 
 def diagnostics_enabled():
     return os.environ.get("PBOS_RUNTIME_DIAGNOSTICS", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def safe_table_mode_enabled():
+    return os.environ.get("PBOS_SAFE_TABLE_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _ensure_tracemalloc():
@@ -76,9 +86,74 @@ def log_dataframe_shape(name, df):
     try:
         rows, cols = df.shape
         memory_mb = float(df.memory_usage(deep=True).sum()) / (1024.0 * 1024.0)
-        log_runtime_event("dataframe", name=name, rows=rows, columns=cols, memory_mb=f"{memory_mb:.3f}")
+        object_columns = int((df.dtypes == "object").sum()) if hasattr(df, "dtypes") else 0
+        nested_cells = count_nested_cells(df)
+        log_runtime_event("dataframe", name=name, rows=rows, columns=cols, memory_mb=f"{memory_mb:.3f}", object_columns=object_columns, nested_cells=nested_cells)
     except Exception:
         log_runtime_event("dataframe", name=name, rows="unknown", columns="unknown")
+
+
+def count_nested_cells(df):
+    try:
+        return int(df.map(lambda value: isinstance(value, (dict, list, tuple, set))).to_numpy().sum())
+    except Exception:
+        return 0
+
+
+def _display_scalar(value):
+    if isinstance(value, (dict, list, tuple, set)):
+        text = ", ".join(str(item) for item in value.items()) if isinstance(value, dict) else ", ".join(str(item) for item in value)
+        return text[:500]
+    if isinstance(value, (_datetime.date, _datetime.datetime)):
+        return value.isoformat()
+    try:
+        if value is None or (pd is not None and pd.isna(value)):
+            return ""
+    except Exception:
+        pass
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)[:500]
+
+
+def normalize_display_dataframe(data, columns=None, max_rows=None):
+    if pd is None:
+        return data
+    df = data.copy() if hasattr(data, "copy") else pd.DataFrame(data)
+    if columns:
+        existing_columns = [column for column in columns if column in df.columns]
+        df = df[existing_columns].copy()
+    else:
+        df = pd.DataFrame(df).copy()
+    df.columns = [str(column) for column in df.columns]
+    if max_rows is not None:
+        df = df.head(int(max_rows)).copy()
+    for column in df.columns:
+        df[column] = df[column].map(_display_scalar)
+    return df
+
+
+def render_display_dataframe(st, name, data, max_rows=100, **kwargs):
+    display_df = normalize_display_dataframe(data, max_rows=max_rows)
+    log_dataframe_shape(f"{name}:before", display_df)
+    if safe_table_mode_enabled():
+        st.table(display_df.head(min(len(display_df), max_rows)))
+    else:
+        st.dataframe(display_df, **kwargs)
+    log_runtime_event("dataframe_rendered", name=name)
+    return display_df
+
+
+def render_display_editor(st, name, data, max_rows=100, **kwargs):
+    display_df = normalize_display_dataframe(data, max_rows=max_rows)
+    log_dataframe_shape(f"{name}:before_editor", display_df)
+    if safe_table_mode_enabled():
+        st.table(display_df.head(min(len(display_df), max_rows)))
+        log_runtime_event("data_editor_safe_preview_rendered", name=name)
+        return display_df
+    edited_df = st.data_editor(display_df, **kwargs)
+    log_runtime_event("data_editor_rendered", name=name)
+    return edited_df
 
 
 def log_figure_shape(section, fig):

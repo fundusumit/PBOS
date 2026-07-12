@@ -1,8 +1,10 @@
 import re
 from pathlib import Path
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from runtime_diagnostics import render_display_dataframe
 
 st.set_page_config(page_title="PBOS ΓÇö Business Planning Operating System", page_icon="≡ƒôè", layout="wide")
 
@@ -262,7 +264,7 @@ if not dependency_registry.empty and changed_driver_values:
                 "Business Reason": row.get("business_reason", ""),
             })
     if rows:
-        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+        render_display_dataframe(st, "business_dependency_intelligence", pd.DataFrame(rows), width="stretch", hide_index=True)
 
 st.subheader("Executive KPIs")
 cols = st.columns(5)
@@ -344,7 +346,7 @@ with col_a:
         "Delta": [fmt(m[2]-m[1], m[3]) for m in metrics],
         "Signal": ["Expansion Risk" if m[0].endswith("CAPEX") and capacity_util>0.90 else ("Improves" if m[2] >= m[1] else "Weakens") for m in metrics]
     })
-    st.dataframe(table, width="stretch", hide_index=True)
+    render_display_dataframe(st, "ceo_kpi_table", table, width="stretch", hide_index=True)
 
 with col_b:
     st.subheader("PBOS AI Advisor")
@@ -362,6 +364,6 @@ with col_b:
 
 st.markdown("---")
 with st.expander("Raw Dashboard Data", expanded=False):
-    st.dataframe(dash.head(300), width="stretch")
+    render_display_dataframe(st, "raw_dashboard_data", dash, max_rows=300, width="stretch")
 with st.expander("Strategy Drivers", expanded=False):
-    st.dataframe(drivers.head(300), width="stretch")
+    render_display_dataframe(st, "strategy_drivers", drivers, max_rows=300, width="stretch")
