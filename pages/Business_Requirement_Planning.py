@@ -2,6 +2,7 @@ import math
 import os
 import sys
 from datetime import date
+from html import escape
 import pandas as pd
 import streamlit as st
 
@@ -39,6 +40,7 @@ st.markdown("""
     flex-wrap: wrap;
     gap: 8px;
     margin-top: 2px;
+    align-items: center;
 }
 .pbos-meta-chip {
     display: inline-block;
@@ -60,8 +62,36 @@ st.markdown("""
     line-height: 1.3;
     margin-left: 4px;
 }
+.pbos-page-creator {
+    margin-left: auto;
+    color: #9fb4ca;
+    font-size: 0.72rem;
+    text-align: right;
+}
+.pbos-page-section-heading {
+    margin: 2px 0 12px;
+    padding: 0 4px;
+}
+.pbos-page-section-heading h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: #13304a;
+    line-height: 1.2;
+}
+.pbos-page-section-heading p {
+    margin: 3px 0 0;
+    font-size: 0.86rem;
+    color: #5f6f7f;
+}
+.pbos-top-controls {
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+    padding-top: 8px;
+}
 .pbos-top-controls .stButton > button {
-    width: 100%;
+    width: auto;
+    min-width: 120px;
     border-radius: 10px;
     border: 1px solid #c8d2e0;
     background: #ffffff;
@@ -98,6 +128,7 @@ st.markdown("""
     margin-bottom: 10px;
 }
 .pbos-kpi-card {
+    position: relative;
     background: #ffffff;
     border: 1px solid #dbe3ee;
     border-radius: 14px;
@@ -111,6 +142,18 @@ st.markdown("""
     gap: 6px;
     overflow: visible;
     box-sizing: border-box;
+}
+.pbos-kpi-accent {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+}
+.pbos-kpi-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 .pbos-kpi-icon {
     width: 28px;
@@ -199,6 +242,39 @@ st.markdown("""
     color: #5b6e82;
     margin: -2px 0 8px 0;
 }
+.pbos-sidebar-note {
+    font-size: 0.76rem;
+    color: #5f7388;
+    margin: 4px 0 8px;
+}
+.pbos-staffing-wrap {
+    border: 1px solid #dbe3ee;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-top: 8px;
+}
+.pbos-staffing-wrap table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 0.78rem;
+}
+.pbos-staffing-wrap th {
+    background: #f4f8fc;
+    color: #334155;
+    font-weight: 700;
+    padding: 8px;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+}
+.pbos-staffing-wrap td {
+    padding: 8px;
+    border-top: 1px solid #eef2f7;
+    vertical-align: top;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
 .pbos-ceo-summary {
     border: 1px solid #d7e1ec;
     border-radius: 12px;
@@ -232,6 +308,11 @@ st.markdown("""
     .pbos-kpi-card {
         min-height: auto;
     }
+    .pbos-page-creator {
+        margin-left: 0;
+        width: 100%;
+        text-align: left;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -242,18 +323,10 @@ def show_about_pbos():
         def _about_dialog():
             st.markdown("### PBOS — Business Planning Operating System")
             st.write("Version 1.0 MVP")
-            st.write("Created by:")
-            st.write("Sumit Kumar Mukherjee")
-            st.write("Role:")
-            st.write("Founder & Product Architect")
-            st.write("Purpose:")
-            st.write("PBOS is a scenario-based business planning platform for poultry and food manufacturing operations. It connects revenue planning with channel ownership, plant capacity, raw-material requirement, logistics, manpower and financial impact.")
+            st.write("Created by Sumit Kumar Mukherjee")
+            st.write("PBOS is a scenario-based planning platform connecting revenue, channel allocation, plant capacity, procurement, logistics, manpower and profitability.")
             st.write("Current status:")
-            st.write("Public planning prototype. Scenario values are planning assumptions and are not live ERP or confirmed operational data.")
-            st.write("Technology:")
-            st.markdown("- Python\n- Streamlit\n- Pandas\n- Plotly\n- GitHub\n- Streamlit Community Cloud")
-            st.write("Repository:")
-            st.write("https://github.com/fundusumit/PBOS")
+            st.write("Public planning prototype using assumptions and scenario inputs. It is not connected to live ERP data.")
 
         _about_dialog()
     else:
@@ -261,7 +334,52 @@ def show_about_pbos():
             st.markdown("### PBOS — Business Planning Operating System")
             st.write("Version 1.0 MVP")
             st.write("Created by: Sumit Kumar Mukherjee")
-            st.write("Role: Founder & Product Architect")
+
+
+def render_staffing_bands_table(staffing_df):
+    columns = [
+        "Function",
+        "Current Workload",
+        "Unit",
+        "Staffing Band",
+        "Lower Threshold",
+        "Upper Threshold",
+        "Current HC",
+        "Recommended HC",
+        "Threshold Status",
+        "Business Reason",
+    ]
+    widths = {
+        "Function": "10%",
+        "Current Workload": "8%",
+        "Unit": "7%",
+        "Staffing Band": "11%",
+        "Lower Threshold": "8%",
+        "Upper Threshold": "8%",
+        "Current HC": "7%",
+        "Recommended HC": "8%",
+        "Threshold Status": "11%",
+        "Business Reason": "22%",
+    }
+    header_html = "".join(f"<th>{escape(col)}</th>" for col in columns)
+    colgroup_html = "".join(f"<col style='width:{widths[col]};'>" for col in columns)
+    row_html = []
+    for _, row in staffing_df.iterrows():
+        cell_html = "".join(f"<td>{escape(str(row.get(col, '')))}</td>" for col in columns)
+        row_html.append(f"<tr>{cell_html}</tr>")
+
+    st.markdown(
+        f"""
+        <div class='pbos-staffing-wrap'>
+          <table>
+            <colgroup>{colgroup_html}</colgroup>
+            <thead><tr>{header_html}</tr></thead>
+            <tbody>{''.join(row_html)}</tbody>
+          </table>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 hero_left, hero_right = st.columns([0.84, 0.16])
@@ -272,9 +390,8 @@ with hero_left:
       <div class="pbos-page-subtitle">Scenario-based planning for revenue, channels, plant capacity, procurement, logistics, manpower and profitability.</div>
       <div class="pbos-page-meta">
         <span class="pbos-meta-chip">Version 1.0 MVP</span>
-        <span class="pbos-meta-chip">Created by Sumit Kumar Mukherjee</span>
-        <span class="pbos-meta-chip">Founder & Product Architect</span>
         <span class="pbos-status-chip">Public Planning Prototype</span>
+                <span class="pbos-page-creator">Created by Sumit Kumar Mukherjee</span>
       </div>
     </div>
     """, unsafe_allow_html=True)
@@ -285,6 +402,15 @@ with hero_right:
     st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown("<div class='pbos-demo-note'><b>Demo note:</b> This public version uses planning assumptions and scenario inputs. It does not contain confidential company data or live ERP transactions.</div>", unsafe_allow_html=True)
+st.markdown(
+        """
+        <div class='pbos-page-section-heading'>
+            <h2>Business Requirement Planning</h2>
+            <p>Scenario-based planning for revenue, channels, capacity, procurement, manpower and profitability.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+)
 
 
 def fmt_currency(value):
@@ -534,6 +660,19 @@ DISTRIBUTION_ICON_KEYS = {
 
 def render_kpi_card(title, value, subtitle=None, status=None, status_type=None, button_label=None, key=None, button_action=None, icon_key=None, value_class=None):
     icon = KPI_ICONS.get(icon_key, "📌")
+    accent_map = {
+        "corporate_revenue": "#3b82f6",
+        "revenue": "#3b82f6",
+        "gross_contribution": "#22c55e",
+        "ebitda": "#8b5cf6",
+        "pat": "#f59e0b",
+        "production_hc": "#14b8a6",
+        "total_employees": "#14b8a6",
+        "plant_utilization": "#22c55e",
+        "capacity_gap": "#f59e0b",
+        "scenario_orders": "#3b82f6",
+    }
+    accent_color = accent_map.get(icon_key, "#3b82f6")
     badge_html = ""
     if status:
         badge_class = f"pbos-status-badge {status_type or 'pbos-status-neutral'}"
@@ -542,8 +681,8 @@ def render_kpi_card(title, value, subtitle=None, status=None, status_type=None, 
     value_class_name = f" pbos-value-negative" if value_class == "negative" else ""
     card_html = (
         f"<div class='pbos-kpi-card'>"
-        f"<div class='pbos-kpi-icon'>{icon}</div>"
-        f"<div class='pbos-kpi-title'>{title}</div>"
+        f"<div class='pbos-kpi-accent' style='background:{accent_color};'></div>"
+        f"<div class='pbos-kpi-head'><div class='pbos-kpi-icon'>{icon}</div><div class='pbos-kpi-title'>{title}</div></div>"
         f"<div class='pbos-kpi-value{value_class_name}'>{value}</div>"
         f"{subtitle_html}"
         f"{badge_html}"
@@ -1319,28 +1458,29 @@ with st.sidebar:
     log_section_start("sidebar_construction")
     st.markdown("### PBOS Planning Controls")
     st.markdown("<div class='pbos-sidebar-caption'>Adjust assumptions to test business scenarios.</div>", unsafe_allow_html=True)
-    st.header("Business Planning Inputs")
-    corporate_revenue_cr = st.number_input("Corporate Revenue Target (₹ Cr / month)", min_value=float(0.0), value=float(6.0), step=float(1.0))
-    business_stage = st.selectbox("Business Stage", ["Startup", "Scale-up", "Regional", "Multi-state", "National"], index=0)
-    operating_model = st.selectbox("Operating Model", ["Asset Light", "Partial Integration", "Fully Integrated"], index=0)
+    with st.expander("A. Business Planning Inputs", expanded=True):
+        corporate_revenue_cr = st.number_input("Corporate Revenue Target (₹ Cr / month)", min_value=float(0.0), value=float(6.0), step=float(1.0))
+        business_stage = st.selectbox("Business Stage", ["Startup", "Scale-up", "Regional", "Multi-state", "National"], index=0)
+        operating_model = st.selectbox("Operating Model", ["Asset Light", "Partial Integration", "Fully Integrated"], index=0)
 
-    st.subheader("Product Mix")
     product_mix = {}
-    for _, row in product_registry.iterrows():
-        product_id = str(row.get("product_id", "")).strip()
-        product_name = str(row.get("product_name", product_id))
-        default_mix = as_float(row.get("default_mix_percent", 0.0))
-        product_mix[product_id] = st.slider(f"{product_name} %", 0, 100, int(default_mix), key=f"product_{product_id}")
+    with st.expander("B. Product Mix", expanded=False):
+        for _, row in product_registry.iterrows():
+            product_id = str(row.get("product_id", "")).strip()
+            product_name = str(row.get("product_name", product_id))
+            default_mix = as_float(row.get("default_mix_percent", 0.0))
+            product_mix[product_id] = st.slider(f"{product_name} %", 0, 100, int(default_mix), key=f"product_{product_id}")
 
-    st.subheader("Channel Mix")
     channel_mix = {}
-    for _, row in channel_registry.iterrows():
-        channel_id = str(row.get("channel_id", "")).strip()
-        channel_name = str(row.get("channel_name", channel_id))
-        default_mix = as_float(row.get("default_mix_percent", 0.0))
-        channel_mix[channel_id] = st.slider(f"{channel_name} %", 0, 100, int(default_mix), key=f"channel_{channel_id}")
+    with st.expander("C. Channel Mix", expanded=False):
+        st.markdown("<div class='pbos-sidebar-note'>Allocate the planned revenue target across active channels.</div>", unsafe_allow_html=True)
+        for _, row in channel_registry.iterrows():
+            channel_id = str(row.get("channel_id", "")).strip()
+            channel_name = str(row.get("channel_name", channel_id))
+            default_mix = as_float(row.get("default_mix_percent", 0.0))
+            channel_mix[channel_id] = st.slider(f"{channel_name} %", 0, 100, int(default_mix), key=f"channel_{channel_id}")
 
-    with st.sidebar.expander("Procurement Drivers", expanded=False):
+    with st.expander("D. Procurement Drivers", expanded=False):
         st.subheader("Procurement Drivers")
         live_bird_rate = st.number_input("Live Bird Rate (₹/kg)", min_value=float(0.0), max_value=float(500.0), value=get_assumption(assumptions, ["LIVE_BIRD_RATE"], as_float(180.0)), step=float(5.0))
         yield_pct = st.number_input("Yield %", min_value=float(0.0), max_value=float(100.0), value=get_assumption(assumptions, ["YIELD_PCT"], as_float(72.0)), step=float(1.0))
@@ -1351,7 +1491,7 @@ with st.sidebar:
         packaging_cost = st.number_input("Packaging Cost (₹/kg)", min_value=float(0.0), max_value=float(250.0), value=get_assumption(assumptions, ["PACKAGING_COST_PER_KG"], as_float(18.0)), step=float(1.0))
         transport_cost = st.number_input("Transport Cost (₹/kg)", min_value=float(0.0), max_value=float(250.0), value=get_assumption(assumptions, ["TRANSPORT_COST_PER_KG"], as_float(12.0)), step=float(1.0))
 
-    with st.sidebar.expander("Plant & Manufacturing Assumptions", expanded=False):
+    with st.expander("E. Plant & Manufacturing Assumptions", expanded=False):
         st.subheader("Operational Assumptions")
         asp_per_kg = st.number_input("Average Selling Price / kg", min_value=float(0.0), max_value=float(1000.0), value=get_assumption(assumptions, ["ASP_KG"], as_float(240.0)), step=float(10.0))
         avg_bird_weight = st.number_input("Average Bird Weight (kg)", min_value=float(0.1), max_value=float(5.0), value=get_assumption(assumptions, ["AVG_BIRD_WEIGHT"], as_float(1.8)), step=float(0.1))
@@ -1366,7 +1506,7 @@ with st.sidebar:
         cold_storage_buffer_days = st.number_input("Cold Storage Buffer Days", min_value=float(0.0), max_value=float(30.0), value=get_assumption(assumptions, ["COLD_STORAGE_BUFFER_DAYS"], as_float(3.0)), step=float(0.5))
         utilization_threshold_pct = st.number_input("Utilization Threshold %", min_value=float(1.0), max_value=float(100.0), value=get_assumption(assumptions, ["UTILIZATION_THRESHOLD_PCT"], as_float(85.0)), step=float(1.0))
 
-    with st.sidebar.expander("Logistics Assumptions", expanded=False):
+    with st.expander("F. Logistics Assumptions", expanded=False):
         st.subheader("Logistics Assumptions")
         primary_vehicle_capacity_kg = st.number_input("Primary Vehicle Capacity (kg)", min_value=float(1.0), max_value=float(50000.0), value=float(4000.0), step=float(500.0))
         primary_trips_per_vehicle_per_day = st.number_input("Primary Trips per Vehicle per Day", min_value=int(1), max_value=int(10), value=int(2), step=int(1))
@@ -1379,7 +1519,7 @@ with st.sidebar:
         secondary_fixed_cost_per_trip = st.number_input("Secondary Fixed Cost per trip", min_value=float(0.0), max_value=float(50000.0), value=float(2000.0), step=float(500.0))
         cold_chain_cost_multiplier = st.number_input("Cold Chain Cost Multiplier", min_value=float(1.0), max_value=float(5.0), value=float(1.20), step=float(0.05))
 
-    with st.sidebar.expander("Contract and Tender Inputs", expanded=False):
+    with st.expander("Contract and Tender Inputs", expanded=False):
         st.subheader("Distributor and Channel Sales Assumptions")
         fresh_distributor_enabled = st.checkbox("Enable Fresh Distributor", value=False)
         shared_frozen_rte_distributor = st.checkbox("Shared Frozen + RTE Distributor", value=True)
@@ -1831,7 +1971,7 @@ for channel_label, revenue_key in {
 }.items():
     planned_channel_volume_kg[channel_label] = float(channel_volume_output.get(revenue_key, {}).get("total_kg_month", 0.0) or 0.0)
 
-with st.sidebar.expander("Order Scenario Testing", expanded=False):
+with st.sidebar.expander("G. Order Scenario Testing", expanded=False):
     order_scenario_mode = st.selectbox("Order Scenario Mode", ["No Scenario", "Channel Achievement %", "Manual Order Volume"], index=0)
     channel_achievement_pct = {}
     manual_order_volume_kg = {}
@@ -2371,7 +2511,8 @@ if manpower_output.get("staffing_bands"):
             "Business Reason": band.get("business_reason", ""),
         })
     staffing_df = pd.DataFrame(staffing_rows)
-    render_display_dataframe(st, "manpower_staffing_bands", staffing_df, hide_index=True, width="stretch")
+    log_dataframe_shape("manpower_staffing_bands", staffing_df)
+    render_staffing_bands_table(staffing_df)
 st.markdown("</div>", unsafe_allow_html=True)
 log_section_end("Manpower Planning")
 
@@ -2531,7 +2672,6 @@ st.markdown(
             <div><b>PBOS — Business Planning Operating System</b></div>
             <div>Version 1.0 MVP</div>
             <div>Created by Sumit Kumar Mukherjee</div>
-            <div>Founder & Product Architect</div>
             <div>© 2026 Sumit Kumar Mukherjee</div>
             <div>Live Demo: <a href='https://pbos-business-planning.streamlit.app' target='_blank'>https://pbos-business-planning.streamlit.app</a></div>
             <div>GitHub: <a href='https://github.com/fundusumit/PBOS' target='_blank'>https://github.com/fundusumit/PBOS</a></div>
