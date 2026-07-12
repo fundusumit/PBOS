@@ -1077,18 +1077,25 @@ def render_distributor_channel_drilldown(kpi_name):
             name, revenue_key, count_key, partner_capacity_key, network_capacity_key, utilization_key, status_key = distribution_map[kpi_name]
             product_mix_pct = 0.0
         st.write("What this network owns")
-        st.write(f"{name} distribution partners carry the planned business revenue with enough capacity for service frequency, cold-chain discipline, and account follow-up.")
+        if kpi_name == "Fresh Chilled Business":
+            st.write("Fresh Chilled business is governed by GT retail coverage, account coverage, cold-chiller capacity and same-day distribution readiness.")
+        else:
+            st.write(f"{name} distribution partners carry the planned business revenue with enough capacity for service frequency, cold-chain discipline, and account follow-up.")
+        partner_label = "GT Retail Coverage" if kpi_name == "Fresh Chilled Business" else "Distribution partners"
         render_display_dataframe(st, f"distribution_{name.lower().replace(' ', '_')}", pd.DataFrame([
             {"Item": "Product Business", "Value": name},
             {"Item": "Product Mix %", "Value": f"{product_mix_pct:,.1f}%"},
             {"Item": "Corporate Revenue Target", "Value": fmt_currency(corporate_revenue_rupees)},
             {"Item": "Allocated Revenue", "Value": fmt_currency(distributor_output[revenue_key])},
             {"Item": "Revenue responsibility", "Value": fmt_currency(distributor_output[revenue_key])},
-            {"Item": "Distribution partners", "Value": f"{distributor_output[count_key]:,.0f}"},
+            {"Item": partner_label, "Value": "Not Connected" if kpi_name == "Fresh Chilled Business" else f"{distributor_output[count_key]:,.0f}"},
             {"Item": "Monthly capacity per partner", "Value": fmt_currency(distributor_output[partner_capacity_key])},
             {"Item": "Monthly network capacity", "Value": fmt_currency(distributor_output[network_capacity_key])},
             {"Item": "Capacity utilization", "Value": f"{distributor_output[utilization_key]:,.1f}%"},
             {"Item": "Capacity signal", "Value": distributor_output[status_key]},
+            {"Item": "HORECA Accounts", "Value": "Not Connected" if kpi_name == "Fresh Chilled Business" else "Not Connected"},
+            {"Item": "Institutional Accounts", "Value": "Not Connected" if kpi_name == "Fresh Chilled Business" else "Not Connected"},
+            {"Item": "Active Market Coverage", "Value": "Not Connected" if kpi_name == "Fresh Chilled Business" else "Not Connected"},
             {"Item": "Actual Partner Count status", "Value": "Not Connected"},
         ]), hide_index=True, width="stretch")
         st.write("What happens if partners are reduced")
@@ -1376,7 +1383,11 @@ def distributor_channel_kpi_card(label, value, key, subtitle=None, status=None, 
 
 
 def distribution_business_card(label, revenue, partners, network_capacity, utilization_pct, status, key):
-    render_kpi_card(label, fmt_currency(revenue), subtitle=f"Distribution Partners: {partners:,.0f} | Monthly Network Capacity: {fmt_currency(network_capacity)} | Utilization: {utilization_pct:,.1f}% | Active distributor actual count: Not Connected", status=status, status_type="pbos-status-neutral", button_label="View details", key=key, button_action=lambda: show_distributor_channel_drilldown(label), icon_key=DISTRIBUTION_ICON_KEYS.get(label))
+    if label == "Fresh Chilled Business":
+        subtitle = f"GT Retail Coverage: Not Connected | HORECA Accounts: Not Connected | Institutional Accounts: Not Connected | Cold Chiller Capacity: {fmt_currency(network_capacity)} | Same-day Distribution: {utilization_pct:,.1f}% | Active Market Coverage: Not Connected"
+    else:
+        subtitle = f"Distribution Partners: {partners:,.0f} | Monthly Network Capacity: {fmt_currency(network_capacity)} | Utilization: {utilization_pct:,.1f}% | Active distributor actual count: Not Connected"
+    render_kpi_card(label, fmt_currency(revenue), subtitle=subtitle, status=status, status_type="pbos-status-neutral", button_label="View details", key=key, button_action=lambda: show_distributor_channel_drilldown(label), icon_key=DISTRIBUTION_ICON_KEYS.get(label))
 
 
 def as_int(v):
@@ -2555,7 +2566,7 @@ render_display_dataframe(st, "product_revenue_reconciliation", pd.DataFrame([
 if abs(distributor_output["product_revenue_variance"]) > product_revenue_tolerance:
     st.warning(f"Product revenue allocation differs from corporate revenue target by {fmt_currency(abs(distributor_output['product_revenue_variance']))}.")
 
-st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:6px;'>A. Distribution Network</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:6px;'>A. Portfolio Distribution Network</div>", unsafe_allow_html=True)
 dcol1, dcol2, dcol3 = st.columns(3)
 with dcol1:
     distribution_business_card(
@@ -2610,12 +2621,12 @@ with dcol5:
     )
 st.caption("Consolidated operational view — not additional revenue.")
 
-st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:10px;'>B. Commercial Execution Capacity</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:10px;'>B. Portfolio Account & Network Capacity</div>", unsafe_allow_html=True)
 exec_col1, exec_col2, exec_col3 = st.columns(3)
 with exec_col1:
     gt_execution = channel_sales_output["general_trade"]
     render_kpi_card(
-        "GT Distributor / Outlet Coverage",
+        "GT Retail Coverage",
         f"{gt_execution['required_distributors']:,.0f} distributors",
         subtitle=f"{gt_execution['target_outlets']:,.0f} target outlets | {gt_execution['outlets_per_distributor']:,.0f} outlets/distributor",
         status=gt_execution["coverage_status"],
@@ -2627,7 +2638,7 @@ with exec_col1:
     )
 with exec_col2:
     render_kpi_card(
-        "MT Accounts",
+        "Modern Trade Accounts",
         f"{channel_sales_output['modern_trade']['accounts']:,.0f}",
         subtitle="Modern Trade accounts",
         icon_key="modern_trade",
@@ -2637,7 +2648,7 @@ with exec_col2:
     )
 with exec_col3:
     render_kpi_card(
-        "Quick Commerce Platforms",
+        "Quick Commerce Network",
         f"{channel_sales_output['quick_commerce']['active_platforms']:,.0f}",
         subtitle=f"{channel_sales_output['quick_commerce']['buying_accounts']:,.0f} buying accounts | {channel_sales_output['quick_commerce']['buying_regions']:,.0f} buying regions",
         icon_key="quick_commerce",
@@ -2649,7 +2660,7 @@ with exec_col3:
 exec_col4, exec_col5, exec_col6 = st.columns(3)
 with exec_col4:
     render_kpi_card(
-        "HoReCa Active Contracts / Accounts",
+        "HORECA Coverage",
         f"{channel_sales_output['horeca']['accounts']:,.0f}",
         subtitle="HoReCa active contracts and accounts",
         icon_key="horeca",
@@ -2659,7 +2670,7 @@ with exec_col4:
     )
 with exec_col5:
     render_kpi_card(
-        "Institutional Tenders / Rate Contracts",
+        "Institutional Accounts",
         f"{channel_sales_output['institution']['accounts']:,.0f}",
         subtitle="Institutional and government tenders",
         icon_key="institutional_government",
