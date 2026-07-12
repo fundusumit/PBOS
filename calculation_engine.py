@@ -1054,15 +1054,21 @@ def build_distributor_output(market_revenue=0.0, product_mix=None, fresh_revenue
     fresh_share = _mix_share(product_mix, "fresh", 0.5)
     frozen_share = _mix_share(product_mix, "frozen", 0.3)
     rte_share = _mix_share(product_mix, "rte", 0.2)
+    fva_share = _mix_share(product_mix, "fva", 0.0)
+
+    revenue_total = _to_float(market_revenue, 0.0)
+    fresh_revenue = revenue_total * fresh_share
     frozen_raw_revenue = _to_float(market_revenue, 0.0) * frozen_share
     rte_revenue = _to_float(market_revenue, 0.0) * rte_share
+    fva_revenue = _to_float(market_revenue, 0.0) * fva_share
     frozen_raw_distributors = _required_count(frozen_raw_revenue, frozen_revenue_per_distributor)
     rte_distributors = _required_count(rte_revenue, rte_revenue_per_distributor)
+    fva_distributors = _required_count(fva_revenue, rte_revenue_per_distributor)
     shared = max(frozen_raw_distributors, rte_distributors) if shared_frozen_rte_distributor else 0
     frozen_capacity = frozen_raw_distributors * _to_float(frozen_revenue_per_distributor, 1.0)
     rte_capacity = rte_distributors * _to_float(rte_revenue_per_distributor, 1.0)
+    fva_capacity = fva_distributors * _to_float(rte_revenue_per_distributor, 1.0)
     shared_capacity = shared * max(_to_float(frozen_revenue_per_distributor, 1.0), _to_float(rte_revenue_per_distributor, 1.0))
-    fresh_revenue = _to_float(market_revenue, 0.0) * fresh_share
     fresh_distributors = _required_count(fresh_revenue, fresh_revenue_per_distributor) if fresh_distributor_enabled else 0
     def util(revenue, capacity):
         return revenue / capacity * 100.0 if capacity > 0 else 0.0
@@ -1070,11 +1076,19 @@ def build_distributor_output(market_revenue=0.0, product_mix=None, fresh_revenue
         return "Additional Partner Required" if pct > 100 else "Near Capacity" if pct > 85 else "Healthy"
     frozen_util = util(frozen_raw_revenue, frozen_capacity)
     rte_util = util(rte_revenue, rte_capacity)
+    fva_util = util(fva_revenue, fva_capacity)
     shared_util = util(frozen_raw_revenue + rte_revenue, shared_capacity)
+    total_product_revenue = fresh_revenue + frozen_raw_revenue + rte_revenue + fva_revenue
+    product_revenue_variance = total_product_revenue - revenue_total
+    product_revenue_reconciled = abs(product_revenue_variance) <= 0.01
     return {
+        "fresh_chilled_revenue": fresh_revenue,
         "fresh_revenue": fresh_revenue,
         "fresh_distributors": fresh_distributors,
         "fresh_revenue_capacity_per_distributor": _to_float(fresh_revenue_per_distributor, 0.0),
+        "fresh_network_capacity": fresh_distributors * _to_float(fresh_revenue_per_distributor, 1.0),
+        "fresh_utilization_pct": util(fresh_revenue, fresh_distributors * _to_float(fresh_revenue_per_distributor, 1.0)),
+        "fresh_capacity_status": status(util(fresh_revenue, fresh_distributors * _to_float(fresh_revenue_per_distributor, 1.0))),
         "frozen_raw_revenue": frozen_raw_revenue,
         "frozen_raw_distributors": frozen_raw_distributors,
         "frozen_revenue_capacity_per_distributor": _to_float(frozen_revenue_per_distributor, 0.0),
@@ -1087,12 +1101,23 @@ def build_distributor_output(market_revenue=0.0, product_mix=None, fresh_revenue
         "rte_network_capacity": rte_capacity,
         "rte_utilization_pct": rte_util,
         "rte_capacity_status": status(rte_util),
+        "fva_revenue": fva_revenue,
+        "fva_distributors": fva_distributors,
+        "fva_revenue_capacity_per_distributor": _to_float(rte_revenue_per_distributor, 0.0),
+        "fva_network_capacity": fva_capacity,
+        "fva_utilization_pct": fva_util,
+        "fva_capacity_status": status(fva_util),
         "shared_frozen_rte_revenue": frozen_raw_revenue + rte_revenue,
+        "shared_frozen_rte_revenue_served": frozen_raw_revenue + rte_revenue,
         "shared_frozen_rte_distributors": shared,
         "shared_frozen_rte_revenue_per_distributor": max(_to_float(frozen_revenue_per_distributor, 0.0), _to_float(rte_revenue_per_distributor, 0.0)),
         "shared_network_capacity": shared_capacity,
         "shared_utilization_pct": shared_util,
         "shared_frozen_rte_capacity_status": status(shared_util),
+        "shared_network_is_consolidated_view": True,
+        "total_product_revenue": total_product_revenue,
+        "product_revenue_variance": product_revenue_variance,
+        "product_revenue_reconciled": product_revenue_reconciled,
         "total_distributors": fresh_distributors + (shared if shared_frozen_rte_distributor else frozen_raw_distributors + rte_distributors),
     }
 

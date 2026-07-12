@@ -772,9 +772,11 @@ LOGISTICS_ICON_KEYS = {
 }
 
 DISTRIBUTION_ICON_KEYS = {
+    "Fresh Chilled Business": "frozen_raw_business",
     "Frozen Raw Business": "frozen_raw_business",
     "RTE Business": "rte_business",
-    "Shared Frozen + RTE Network": "shared_distribution_network",
+    "Further Value Added Business": "shared_distribution_network",
+    "Shared Frozen + RTE Distribution Network": "shared_distribution_network",
 }
 
 
@@ -1062,21 +1064,32 @@ def show_order_capacity_drilldown():
 
 def render_distributor_channel_drilldown(kpi_name):
     distribution_map = {
-        "Frozen Raw Business": ("Frozen Raw", "frozen_raw_revenue", "frozen_raw_distributors", "frozen_revenue_capacity_per_distributor", "frozen_network_capacity", "frozen_utilization_pct", "frozen_capacity_status"),
-        "RTE Business": ("RTE", "rte_revenue", "rte_distributors", "rte_revenue_capacity_per_distributor", "rte_network_capacity", "rte_utilization_pct", "rte_capacity_status"),
-        "Shared Frozen + RTE Network": ("Shared Frozen + RTE", "shared_frozen_rte_revenue", "shared_frozen_rte_distributors", "shared_frozen_rte_revenue_per_distributor", "shared_network_capacity", "shared_utilization_pct", "shared_frozen_rte_capacity_status"),
+        "Fresh Chilled Business": ("Fresh Chilled", "FRESH", "fresh_chilled_revenue", "fresh_distributors", "fresh_revenue_capacity_per_distributor", "fresh_network_capacity", "fresh_utilization_pct", "fresh_capacity_status"),
+        "Frozen Raw Business": ("Frozen Raw", "FROZEN", "frozen_raw_revenue", "frozen_raw_distributors", "frozen_revenue_capacity_per_distributor", "frozen_network_capacity", "frozen_utilization_pct", "frozen_capacity_status"),
+        "RTE Business": ("Ready To Eat", "RTE", "rte_revenue", "rte_distributors", "rte_revenue_capacity_per_distributor", "rte_network_capacity", "rte_utilization_pct", "rte_capacity_status"),
+        "Further Value Added Business": ("Further Value Added", "FVA", "fva_revenue", "fva_distributors", "fva_revenue_capacity_per_distributor", "fva_network_capacity", "fva_utilization_pct", "fva_capacity_status"),
     }
     if kpi_name in distribution_map:
-        name, revenue_key, count_key, partner_capacity_key, network_capacity_key, utilization_key, status_key = distribution_map[kpi_name]
+        if len(distribution_map[kpi_name]) == 8:
+            name, product_key, revenue_key, count_key, partner_capacity_key, network_capacity_key, utilization_key, status_key = distribution_map[kpi_name]
+            product_mix_pct = float(product_mix.get(product_key, 0.0) or 0.0)
+        else:
+            name, revenue_key, count_key, partner_capacity_key, network_capacity_key, utilization_key, status_key = distribution_map[kpi_name]
+            product_mix_pct = 0.0
         st.write("What this network owns")
         st.write(f"{name} distribution partners carry the planned business revenue with enough capacity for service frequency, cold-chain discipline, and account follow-up.")
         render_display_dataframe(st, f"distribution_{name.lower().replace(' ', '_')}", pd.DataFrame([
+            {"Item": "Product Business", "Value": name},
+            {"Item": "Product Mix %", "Value": f"{product_mix_pct:,.1f}%"},
+            {"Item": "Corporate Revenue Target", "Value": fmt_currency(corporate_revenue_rupees)},
+            {"Item": "Allocated Revenue", "Value": fmt_currency(distributor_output[revenue_key])},
             {"Item": "Revenue responsibility", "Value": fmt_currency(distributor_output[revenue_key])},
             {"Item": "Distribution partners", "Value": f"{distributor_output[count_key]:,.0f}"},
             {"Item": "Monthly capacity per partner", "Value": fmt_currency(distributor_output[partner_capacity_key])},
             {"Item": "Monthly network capacity", "Value": fmt_currency(distributor_output[network_capacity_key])},
             {"Item": "Capacity utilization", "Value": f"{distributor_output[utilization_key]:,.1f}%"},
             {"Item": "Capacity signal", "Value": distributor_output[status_key]},
+            {"Item": "Actual Partner Count status", "Value": "Not Connected"},
         ]), hide_index=True, width="stretch")
         st.write("What happens if partners are reduced")
         st.write("The same revenue has to move through fewer partners, which increases service-frequency pressure, cold-chain execution risk, and account follow-up delays.")
@@ -1087,6 +1100,20 @@ def render_distributor_channel_drilldown(kpi_name):
             st.write("Monitor this network closely; it is close to the practical operating limit.")
         else:
             st.write("Current partner capacity can support the planned business.")
+        return
+
+    if kpi_name == "Shared Frozen + RTE Distribution Network":
+        st.write("Consolidated shared network view")
+        st.write("This combines Frozen Raw and RTE distribution load for an operational planning view. It is not an additional revenue stream.")
+        render_display_dataframe(st, "distribution_shared_frozen_rte", pd.DataFrame([
+            {"Item": "Frozen Raw Revenue", "Value": fmt_currency(distributor_output["frozen_raw_revenue"])},
+            {"Item": "RTE Revenue", "Value": fmt_currency(distributor_output["rte_revenue"])},
+            {"Item": "Combined Revenue Served", "Value": fmt_currency(distributor_output["shared_frozen_rte_revenue_served"])},
+            {"Item": "Shared Network Capacity", "Value": fmt_currency(distributor_output["shared_network_capacity"])},
+            {"Item": "Utilization", "Value": f"{distributor_output['shared_utilization_pct']:,.1f}%"},
+            {"Item": "Capacity Gap", "Value": fmt_currency(max(0.0, distributor_output["shared_frozen_rte_revenue_served"] - distributor_output["shared_network_capacity"]))},
+            {"Item": "Note", "Value": "Consolidated view only — not additional revenue"},
+        ]), hide_index=True, width="stretch")
         return
 
     if kpi_name == "GT Sales Executives":
@@ -1956,7 +1983,7 @@ logistics_output = build_logistics_output(
     plant_id=selected_plant_id,
 )
 distributor_output = build_distributor_output(
-    market_revenue=market_revenue_rupees,
+    market_revenue=corporate_revenue_rupees,
     product_mix=product_mix,
     fresh_revenue_per_distributor=fresh_revenue_per_distributor,
     frozen_revenue_per_distributor=frozen_revenue_per_distributor,
@@ -1964,6 +1991,35 @@ distributor_output = build_distributor_output(
     fresh_distributor_enabled=fresh_distributor_enabled,
     shared_frozen_rte_distributor=shared_frozen_rte_distributor,
 )
+distributor_output = dict(distributor_output or {})
+fresh_share = float(product_mix.get("FRESH", 0.0) or 0.0) / 100.0
+frozen_share = float(product_mix.get("FROZEN", 0.0) or 0.0) / 100.0
+rte_share = float(product_mix.get("RTE", 0.0) or 0.0) / 100.0
+fva_share = float(product_mix.get("FVA", 0.0) or 0.0) / 100.0
+def _util_pct(revenue_value, capacity_value):
+    return (revenue_value / capacity_value * 100.0) if capacity_value > 0 else 0.0
+def _capacity_status(utilization_pct):
+    return "Additional Partner Required" if utilization_pct > 100 else "Near Capacity" if utilization_pct > 85 else "Healthy"
+distributor_output.setdefault("fresh_chilled_revenue", corporate_revenue_rupees * fresh_share)
+distributor_output.setdefault("fresh_revenue", distributor_output["fresh_chilled_revenue"])
+distributor_output.setdefault("fresh_distributors", max(0, math.ceil(distributor_output["fresh_chilled_revenue"] / max(1.0, fresh_revenue_per_distributor))))
+distributor_output.setdefault("fresh_revenue_capacity_per_distributor", float(fresh_revenue_per_distributor))
+distributor_output.setdefault("fresh_network_capacity", distributor_output["fresh_distributors"] * distributor_output["fresh_revenue_capacity_per_distributor"])
+distributor_output.setdefault("fresh_utilization_pct", _util_pct(distributor_output["fresh_chilled_revenue"], distributor_output["fresh_network_capacity"]))
+distributor_output.setdefault("fresh_capacity_status", _capacity_status(distributor_output["fresh_utilization_pct"]))
+distributor_output.setdefault("frozen_raw_revenue", corporate_revenue_rupees * frozen_share)
+distributor_output.setdefault("rte_revenue", corporate_revenue_rupees * rte_share)
+distributor_output.setdefault("fva_revenue", corporate_revenue_rupees * fva_share)
+distributor_output.setdefault("fva_distributors", max(0, math.ceil(distributor_output["fva_revenue"] / max(1.0, rte_revenue_per_distributor))))
+distributor_output.setdefault("fva_revenue_capacity_per_distributor", float(rte_revenue_per_distributor))
+distributor_output.setdefault("fva_network_capacity", distributor_output["fva_distributors"] * distributor_output["fva_revenue_capacity_per_distributor"])
+distributor_output.setdefault("fva_utilization_pct", _util_pct(distributor_output["fva_revenue"], distributor_output["fva_network_capacity"]))
+distributor_output.setdefault("fva_capacity_status", _capacity_status(distributor_output["fva_utilization_pct"]))
+distributor_output.setdefault("total_product_revenue", distributor_output["fresh_chilled_revenue"] + distributor_output["frozen_raw_revenue"] + distributor_output["rte_revenue"] + distributor_output["fva_revenue"])
+distributor_output.setdefault("product_revenue_variance", distributor_output["total_product_revenue"] - corporate_revenue_rupees)
+distributor_output.setdefault("product_revenue_reconciled", abs(distributor_output["product_revenue_variance"]) <= 0.01)
+distributor_output.setdefault("shared_frozen_rte_revenue_served", distributor_output["frozen_raw_revenue"] + distributor_output["rte_revenue"])
+distributor_output.setdefault("shared_network_is_consolidated_view", True)
 channel_sales_output = build_channel_sales_output(
     market_revenue=market_revenue_rupees,
     channel_mix=channel_mix,
@@ -2485,9 +2541,33 @@ log_section_start("Commercial & Distribution Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-title'>Commercial & Distribution Planning</div>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-subtitle'>Execution capacity and distributor network for commercial delivery.</div>", unsafe_allow_html=True)
+product_revenue_tolerance = 0.01
+st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:6px;'>Product Revenue Reconciliation</div>", unsafe_allow_html=True)
+render_display_dataframe(st, "product_revenue_reconciliation", pd.DataFrame([
+    {"Metric": "Corporate Revenue Target", "Value": fmt_currency(corporate_revenue_rupees)},
+    {"Metric": "Fresh Chilled", "Value": fmt_currency(distributor_output["fresh_chilled_revenue"])},
+    {"Metric": "Frozen Raw", "Value": fmt_currency(distributor_output["frozen_raw_revenue"])},
+    {"Metric": "Ready To Eat", "Value": fmt_currency(distributor_output["rte_revenue"])},
+    {"Metric": "Further Value Added", "Value": fmt_currency(distributor_output["fva_revenue"])},
+    {"Metric": "Total Product Revenue", "Value": fmt_currency(distributor_output["total_product_revenue"])},
+    {"Metric": "Reconciliation Status", "Value": "Reconciled" if distributor_output["product_revenue_reconciled"] else "Not Reconciled"},
+]), hide_index=True, width="stretch")
+if abs(distributor_output["product_revenue_variance"]) > product_revenue_tolerance:
+    st.warning(f"Product revenue allocation differs from corporate revenue target by {fmt_currency(abs(distributor_output['product_revenue_variance']))}.")
+
 st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:6px;'>A. Distribution Network</div>", unsafe_allow_html=True)
 dcol1, dcol2, dcol3 = st.columns(3)
 with dcol1:
+    distribution_business_card(
+        "Fresh Chilled Business",
+        distributor_output["fresh_chilled_revenue"],
+        distributor_output["fresh_distributors"],
+        distributor_output["fresh_network_capacity"],
+        distributor_output["fresh_utilization_pct"],
+        distributor_output["fresh_capacity_status"],
+        "dist_fresh_chilled_business",
+    )
+with dcol2:
     distribution_business_card(
         "Frozen Raw Business",
         distributor_output["frozen_raw_revenue"],
@@ -2497,7 +2577,7 @@ with dcol1:
         distributor_output["frozen_capacity_status"],
         "dist_frozen_raw_business",
     )
-with dcol2:
+with dcol3:
     distribution_business_card(
         "RTE Business",
         distributor_output["rte_revenue"],
@@ -2507,16 +2587,28 @@ with dcol2:
         distributor_output["rte_capacity_status"],
         "dist_rte_business",
     )
-with dcol3:
+dcol4, dcol5 = st.columns(2)
+with dcol4:
     distribution_business_card(
-        "Shared Frozen + RTE Network",
-        distributor_output["shared_frozen_rte_revenue"],
+        "Further Value Added Business",
+        distributor_output["fva_revenue"],
+        distributor_output["fva_distributors"],
+        distributor_output["fva_network_capacity"],
+        distributor_output["fva_utilization_pct"],
+        distributor_output["fva_capacity_status"],
+        "dist_fva_business",
+    )
+with dcol5:
+    distribution_business_card(
+        "Shared Frozen + RTE Distribution Network",
+        distributor_output["shared_frozen_rte_revenue_served"],
         distributor_output["shared_frozen_rte_distributors"],
         distributor_output["shared_network_capacity"],
         distributor_output["shared_utilization_pct"],
         distributor_output["shared_frozen_rte_capacity_status"],
         "dist_shared_frozen_rte_network",
     )
+st.caption("Consolidated operational view — not additional revenue.")
 
 st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:10px;'>B. Commercial Execution Capacity</div>", unsafe_allow_html=True)
 exec_col1, exec_col2, exec_col3 = st.columns(3)
@@ -2863,11 +2955,11 @@ with st.expander("Reverse Distributor and GT Sales Planning", expanded=False):
     else:
         st.success("Recommendation: institutional and government ownership supports tenders, rate contracts, and collections follow-up.")
 
-    distributor_choice = st.selectbox("Distributor Type", ["Frozen Raw", "RTE", "Shared Frozen + RTE"], key="reverse_distributor_type")
+    distributor_choice = st.selectbox("Distributor Type", ["Frozen Raw", "RTE", "Shared Frozen + RTE Distribution Network"], key="reverse_distributor_type")
     distributor_map = {
         "Frozen Raw": ("frozen_raw_revenue", "frozen_raw_distributors", "frozen_revenue_capacity_per_distributor"),
-        "RTE": ("rte_revenue", "rte_distributors", "rte_revenue_per_distributor"),
-        "Shared Frozen + RTE": ("shared_frozen_rte_revenue", "shared_frozen_rte_distributors", "shared_frozen_rte_revenue_per_distributor"),
+        "RTE": ("rte_revenue", "rte_distributors", "rte_revenue_capacity_per_distributor"),
+        "Shared Frozen + RTE Distribution Network": ("shared_frozen_rte_revenue_served", "shared_frozen_rte_distributors", "shared_frozen_rte_revenue_per_distributor"),
     }
     revenue_key, count_key, capacity_key = distributor_map[distributor_choice]
     target_distributors = st.number_input("CEO Distributor Count", min_value=int(0), value=int(distributor_output[count_key]), step=int(1), key="reverse_distributor_count")
