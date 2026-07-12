@@ -27,7 +27,9 @@ st.markdown("""
     font-weight: 700;
     color: #ffffff;
     margin: 0 0 4px 0;
-    line-height: 1.15;
+    line-height: 1.2;
+    word-break: normal;
+    overflow-wrap: anywhere;
 }
 .pbos-page-subtitle {
     font-size: 0.88rem;
@@ -250,11 +252,13 @@ st.markdown("""
 .pbos-staffing-wrap {
     border: 1px solid #dbe3ee;
     border-radius: 12px;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
     margin-top: 8px;
 }
 .pbos-staffing-wrap table {
     width: 100%;
+    min-width: 980px;
     border-collapse: collapse;
     table-layout: fixed;
     font-size: 0.78rem;
@@ -312,6 +316,122 @@ st.markdown("""
         margin-left: 0;
         width: 100%;
         text-align: left;
+    }
+}
+@media (max-width: 768px) {
+    .block-container {
+        padding-left: 0.9rem;
+        padding-right: 0.9rem;
+        padding-bottom: 5rem;
+    }
+    .pbos-page-header {
+        padding: 1rem 1rem 0.9rem 1rem;
+        margin-bottom: 0.6rem;
+    }
+    .pbos-page-title {
+        font-size: 1.55rem;
+        line-height: 1.2;
+        word-break: normal;
+        overflow-wrap: anywhere;
+    }
+    .pbos-page-subtitle {
+        font-size: 0.9rem;
+        line-height: 1.4;
+    }
+    .pbos-page-meta {
+        gap: 0.4rem;
+    }
+    .pbos-meta-chip,
+    .pbos-status-chip {
+        font-size: 0.68rem;
+        padding: 2px 7px;
+        max-width: 100%;
+    }
+    .pbos-page-creator {
+        margin-top: 0.15rem;
+        font-size: 0.72rem;
+    }
+    .pbos-top-controls {
+        justify-content: flex-start;
+        padding-top: 0.15rem;
+        margin-top: 0.6rem;
+    }
+    .pbos-top-controls .stButton > button {
+        width: auto;
+        min-width: 112px;
+        padding: 0.38rem 0.62rem;
+    }
+    .pbos-demo-note {
+        padding: 0.8rem 0.9rem;
+        font-size: 0.9rem;
+        line-height: 1.45;
+    }
+    .pbos-page-section-heading {
+        margin-top: 0;
+        margin-bottom: 10px;
+    }
+    .pbos-page-section-heading h2 {
+        font-size: 1.8rem;
+        line-height: 1.2;
+    }
+    .pbos-page-section-heading p {
+        font-size: 0.9rem;
+        line-height: 1.4;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary {
+        font-size: 0.86rem;
+        line-height: 1.25;
+        min-height: 44px;
+        padding-top: 0.35rem;
+        padding-bottom: 0.35rem;
+        white-space: normal;
+    }
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        gap: 0.45rem;
+    }
+    [data-testid="stSidebar"] [data-baseweb="input"],
+    [data-testid="stSidebar"] [data-baseweb="select"],
+    [data-testid="stSidebar"] .stSlider,
+    [data-testid="stSidebar"] .stButton {
+        width: 100%;
+    }
+    [data-testid="stHorizontalBlock"] {
+        gap: 0.55rem;
+    }
+    [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+        min-width: calc(50% - 0.3rem);
+        flex: 1 1 calc(50% - 0.3rem);
+    }
+    .pbos-kpi-card {
+        padding: 12px;
+    }
+    .pbos-kpi-title {
+        font-size: 0.78rem;
+        line-height: 1.25;
+    }
+    .pbos-kpi-value {
+        font-size: 1.35rem;
+        line-height: 1.2;
+    }
+    .pbos-kpi-subtitle {
+        font-size: 0.82rem;
+    }
+    .pbos-status-badge {
+        font-size: 0.7rem;
+        padding: 2px 7px;
+    }
+    .pbos-staffing-wrap {
+        overflow-x: auto;
+    }
+    .pbos-staffing-wrap table {
+        font-size: 0.74rem;
+        min-width: 900px;
+    }
+}
+@media (max-width: 600px) {
+    [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+        min-width: 100%;
+        flex: 1 1 100%;
     }
 }
 </style>

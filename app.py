@@ -141,6 +141,29 @@ st.markdown("""
 @media (max-width: 980px) {
   .hero-creator {margin-left:0;width:100%;text-align:left;}
 }
+@media (max-width: 768px) {
+    .block-container {padding-left:0.85rem;padding-right:0.85rem;padding-bottom:5rem;}
+    .hero {padding:1rem 1rem 0.9rem 1rem;}
+    .hero h1 {font-size:1.5rem;line-height:1.2;word-break:normal;overflow-wrap:anywhere;}
+    .hero p {font-size:0.9rem;line-height:1.4;}
+    .hero-meta {gap:0.4rem;}
+    .hero-chip, .hero-badge {font-size:0.68rem;padding:2px 7px;max-width:100%;}
+    .hero-creator {width:100%;font-size:0.72rem;margin-top:0.15rem;}
+    .top-controls {justify-content:flex-start;align-items:flex-start;padding-top:0.15rem;margin-top:0.6rem;}
+    .top-controls .stButton > button {width:auto;min-width:112px;padding:0.38rem 0.62rem;}
+    .demo-note {padding:0.8rem 0.9rem;font-size:0.9rem;line-height:1.45;}
+    .card {height:auto;min-height:0;padding:12px 12px 11px;}
+    .card-title {white-space:normal;overflow:visible;text-overflow:clip;font-size:0.78rem;}
+    .card-value {font-size:1.35rem;line-height:1.2;white-space:normal;overflow-wrap:anywhere;}
+    .card-sub {font-size:0.82rem;}
+    .card-badge {font-size:0.7rem;padding:2px 7px;}
+    [data-testid="stHorizontalBlock"] {gap:0.55rem;}
+    [data-testid="stHorizontalBlock"] > [data-testid="column"] {min-width:calc(50% - 0.3rem);flex:1 1 calc(50% - 0.3rem);}
+    .section-shell {overflow-x:auto;}
+}
+@media (max-width: 600px) {
+    [data-testid="stHorizontalBlock"] > [data-testid="column"] {min-width:100%;flex:1 1 100%;}
+}
 </style>
 """, unsafe_allow_html=True)
 
