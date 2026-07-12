@@ -49,6 +49,105 @@ def _live_bird_rate(value):
     return _clamp(_to_float(value, 120.0), 104.0, 180.0)
 
 
+def _nonnegative(value, default=0.0):
+    return max(0.0, _to_float(value, default))
+
+
+def _procurement_driver_value(procurement_drivers, key, fallback):
+    if isinstance(procurement_drivers, dict) and key in procurement_drivers:
+        return procurement_drivers.get(key)
+    return fallback
+
+
+def _procurement_route_shares(operating_model=None):
+    model = str(operating_model or "").strip().lower()
+    if "fully" in model:
+        return 0.20, 0.80, "Fully Integrated procurement assumption: 20% trader sourced and 80% direct or contract farm sourced."
+    if "partial" in model:
+        return 0.60, 0.40, "Partial Integration procurement assumption: 60% trader sourced and 40% direct or contract farm sourced."
+    return 0.70, 0.30, "Asset Light procurement assumption: 70% trader sourced and 30% direct or contract farm sourced."
+
+
+def build_procurement_cost_waterfall(
+    live_bird_rate_per_kg=120.0,
+    yield_pct=72.0,
+    mortality_pct=2.0,
+    processing_loss_pct=3.0,
+    gt_distributor_margin_pct=None,
+    packaging_cost_per_kg=18.0,
+    transport_cost_per_kg=12.0,
+    processing_cost_per_kg=12.0,
+    factory_overhead_per_kg=5.0,
+    target_margin_pct=18.0,
+    operating_model=None,
+    # Deprecated compatibility parameters: accepted but ignored for procurement costing.
+    trader_margin_pct=None,
+    farm_margin_pct=None,
+):
+    rate = _nonnegative(live_bird_rate_per_kg, 120.0)
+    dressed_yield_pct = _to_float(yield_pct, 72.0)
+    mortality_pct = _to_float(mortality_pct, 2.0)
+    processing_loss_pct = _to_float(processing_loss_pct, 3.0)
+    if not (0 < dressed_yield_pct <= 100):
+        raise ValueError("Yield % must be greater than 0 and less than or equal to 100.")
+    if not (0 <= mortality_pct < 100):
+        raise ValueError("Mortality % must be greater than or equal to 0 and less than 100.")
+    if not (0 <= processing_loss_pct < 100):
+        raise ValueError("Processing Loss % must be greater than or equal to 0 and less than 100.")
+    if gt_distributor_margin_pct is None:
+        gt_distributor_margin_pct = trader_margin_pct
+    gt_distributor_margin_pct = _nonnegative(gt_distributor_margin_pct, 6.0)
+    packaging_cost_per_kg = _nonnegative(packaging_cost_per_kg, 18.0)
+    transport_cost_per_kg = _nonnegative(transport_cost_per_kg, 12.0)
+    processing_cost_per_kg = _nonnegative(processing_cost_per_kg, 12.0)
+    factory_overhead_per_kg = _nonnegative(factory_overhead_per_kg, 5.0)
+    target_margin_pct = _nonnegative(target_margin_pct, 18.0)
+
+    _, _, sourcing_assumption = _procurement_route_shares(operating_model)
+    dressed_yield_rate = dressed_yield_pct / 100.0
+    processing_retention_rate = 1.0 - processing_loss_pct / 100.0
+    survival_rate = 1.0 - mortality_pct / 100.0
+    effective_yield_rate = dressed_yield_rate * processing_retention_rate
+    # Live bird rate is the final all-inclusive lifting rate and must be used directly.
+    raw_material_cost_per_finished_kg = rate / max(0.0001, effective_yield_rate * survival_rate)
+    total_ex_factory_cost_per_kg = raw_material_cost_per_finished_kg + processing_cost_per_kg + packaging_cost_per_kg + factory_overhead_per_kg
+    total_delivered_cost_per_kg = total_ex_factory_cost_per_kg + transport_cost_per_kg
+    margin_denominator = max(0.01, 1.0 - target_margin_pct / 100.0)
+    return {
+        "live_bird_base_rate_per_kg": rate,
+        "live_bird_rate_per_kg": rate,
+        "sourcing_assumption": sourcing_assumption,
+        "gt_distributor_margin_pct": gt_distributor_margin_pct,
+        "dressed_yield_pct": dressed_yield_pct,
+        "processing_loss_pct": processing_loss_pct,
+        "processing_retention_pct": processing_retention_rate * 100.0,
+        "effective_finished_goods_yield_pct": effective_yield_rate * 100.0,
+        "mortality_pct": mortality_pct,
+        "survival_rate_pct": survival_rate * 100.0,
+        "raw_material_cost_per_finished_kg": raw_material_cost_per_finished_kg,
+        "processing_cost_per_kg": processing_cost_per_kg,
+        "packaging_cost_per_kg": packaging_cost_per_kg,
+        "transport_cost_per_kg": transport_cost_per_kg,
+        "factory_overhead_per_kg": factory_overhead_per_kg,
+        "total_ex_factory_cost_per_kg": total_ex_factory_cost_per_kg,
+        "total_delivered_cost_per_kg": total_delivered_cost_per_kg,
+        "target_margin_pct": target_margin_pct,
+        "recommended_ex_factory_price_per_kg": total_ex_factory_cost_per_kg / margin_denominator,
+        "recommended_delivered_price_per_kg": total_delivered_cost_per_kg / margin_denominator,
+    }
+
+
+PROCUREMENT_DRIVER_IMPACT_MAP = {
+    "Live Bird Rate": ["Raw Material Cost/kg", "Live Bird Procurement Spend", "Total Cost/kg", "Gross Contribution", "EBITDA", "PAT", "Recommended Selling Price"],
+    "Yield %": ["Effective Finished-Goods Yield", "Live Weight Required", "Birds/day", "Procurement Spend", "Gross Contribution"],
+    "Mortality %": ["Gross Birds Required", "Live Weight Required", "Procurement Spend", "Farms Required", "Gross Contribution"],
+    "Processing Loss %": ["Effective Finished-Goods Yield", "Raw Material Cost/kg", "Birds/day", "Procurement Spend", "Gross Contribution"],
+    "GT Distributor Margin %": ["GT Company Net Realization", "GT Contribution", "Consolidated Gross Contribution", "EBITDA", "PAT"],
+    "Packaging Cost": ["Packaging Spend", "Total Cost/kg", "Gross Contribution", "EBITDA", "PAT", "Recommended Selling Price"],
+    "Transport Cost": ["Transport Spend", "Delivered Cost/kg", "Gross Contribution", "EBITDA", "PAT", "Recommended Selling Price"],
+}
+
+
 def _mix_value(mix, key, default=0.0):
     aliases = {
         "gt": "GT",
@@ -895,21 +994,54 @@ def build_contract_pricing_output(
     factory_overhead_per_kg=5.0,
     target_margin_pct=18.0,
     institutional_pack_size_kg=2.0,
+    procurement_drivers=None,
+    yield_pct=None,
+    mortality_pct=None,
+    processing_loss_pct=None,
+    gt_distributor_margin_pct=None,
+    transport_cost_per_kg=None,
+    operating_model=None,
+    trader_margin_pct=None,
+    farm_margin_pct=None,
 ):
-    rate = _live_bird_rate(live_bird_rate)
-    yield_pct = max(0.01, _to_float(dressed_output_kg, 1.3) / max(0.1, _to_float(average_live_bird_weight_kg, 1.8)))
-    raw_material_cost_per_kg = rate / yield_pct
-    total_cost_per_kg = raw_material_cost_per_kg + _to_float(processing_cost_per_kg, 12.0) + _to_float(packaging_cost_per_kg, 8.0) + _to_float(cold_chain_logistics_cost_per_kg, 6.0) + _to_float(factory_overhead_per_kg, 5.0)
-    recommended_price = total_cost_per_kg / max(0.01, 1.0 - _to_float(target_margin_pct, 18.0) / 100.0)
+    inferred_yield_pct = max(0.01, _to_float(dressed_output_kg, 1.3) / max(0.1, _to_float(average_live_bird_weight_kg, 1.8))) * 100.0
+    waterfall = build_procurement_cost_waterfall(
+        live_bird_rate_per_kg=_procurement_driver_value(procurement_drivers, "live_bird_rate_per_kg", live_bird_rate),
+        yield_pct=_procurement_driver_value(procurement_drivers, "yield_pct", yield_pct if yield_pct is not None else inferred_yield_pct),
+        mortality_pct=_procurement_driver_value(procurement_drivers, "mortality_pct", mortality_pct if mortality_pct is not None else 0.0),
+        processing_loss_pct=_procurement_driver_value(procurement_drivers, "processing_loss_pct", processing_loss_pct if processing_loss_pct is not None else 0.0),
+        gt_distributor_margin_pct=_procurement_driver_value(procurement_drivers, "gt_distributor_margin_pct", gt_distributor_margin_pct if gt_distributor_margin_pct is not None else 0.0),
+        packaging_cost_per_kg=_procurement_driver_value(procurement_drivers, "packaging_cost_per_kg", packaging_cost_per_kg),
+        transport_cost_per_kg=_procurement_driver_value(procurement_drivers, "transport_cost_per_kg", transport_cost_per_kg if transport_cost_per_kg is not None else cold_chain_logistics_cost_per_kg),
+        processing_cost_per_kg=processing_cost_per_kg,
+        factory_overhead_per_kg=factory_overhead_per_kg,
+        target_margin_pct=target_margin_pct,
+        operating_model=operating_model,
+        trader_margin_pct=trader_margin_pct,
+        farm_margin_pct=farm_margin_pct,
+    )
+    rate = waterfall["live_bird_base_rate_per_kg"]
+    raw_material_cost_per_kg = waterfall["raw_material_cost_per_finished_kg"]
+    total_cost_per_kg = waterfall["total_delivered_cost_per_kg"]
+    recommended_price = waterfall["recommended_delivered_price_per_kg"]
     return {
         "live_bird_rate": rate,
+        "gt_distributor_margin_pct": waterfall["gt_distributor_margin_pct"],
+        "dressed_yield_pct": waterfall["dressed_yield_pct"] / 100.0,
+        "processing_loss_pct": waterfall["processing_loss_pct"],
+        "effective_finished_goods_yield_pct": waterfall["effective_finished_goods_yield_pct"],
         "raw_material_cost_per_kg": raw_material_cost_per_kg,
+        "processing_cost_per_kg": waterfall["processing_cost_per_kg"],
+        "packaging_cost_per_kg": waterfall["packaging_cost_per_kg"],
+        "cold_chain_logistics_cost_per_kg": waterfall["transport_cost_per_kg"],
+        "factory_overhead_per_kg": waterfall["factory_overhead_per_kg"],
         "total_cost_per_kg": total_cost_per_kg,
         "recommended_selling_price_per_kg": recommended_price,
         "contract_rate_per_kg": recommended_price,
         "horeca_contract_revenue": recommended_price * _to_float(contract_volume_kg_month, 0.0),
         "institutional_contract_revenue": recommended_price * _to_float(awarded_volume_kg_month, 0.0),
         "institutional_pack_size_kg": institutional_pack_size_kg,
+        "cost_waterfall": waterfall,
     }
 
 
@@ -964,7 +1096,7 @@ def build_distributor_output(market_revenue=0.0, product_mix=None, fresh_revenue
     }
 
 
-def build_channel_sales_output(market_revenue=0.0, channel_mix=None, working_days=25, gt_revenue_per_sales_executive=6000000.0, gt_outlets_per_sales_executive=120, gt_sales_executives_per_asm=6, mt_revenue_per_kam=12000000.0, quick_commerce_revenue_per_kam=10000000.0, horeca_revenue_per_sales_executive=6000000.0, institution_revenue_per_account_manager=10000000.0, calls_per_sales_executive_day=20, distributor_output=None, business_stage=None, live_bird_rate=120.0, horeca_revenue_mode="CONTRACT", horeca_contract_rate_per_kg=None, horeca_contract_volume_kg_month=0.0, horeca_active_accounts=0, horeca_credit_days=30, institutional_revenue_mode="CONTRACT", institutional_contract_rate_per_kg=None, institutional_awarded_volume_kg_month=0.0, institutional_contract_name="", institutional_contract_start_date="", institutional_contract_end_date="", revenue_mode="PLANNING"):
+def build_channel_sales_output(market_revenue=0.0, channel_mix=None, working_days=25, gt_revenue_per_sales_executive=6000000.0, gt_outlets_per_sales_executive=120, gt_sales_executives_per_asm=6, mt_revenue_per_kam=12000000.0, quick_commerce_revenue_per_kam=10000000.0, horeca_revenue_per_sales_executive=6000000.0, institution_revenue_per_account_manager=10000000.0, calls_per_sales_executive_day=20, distributor_output=None, business_stage=None, live_bird_rate=120.0, horeca_revenue_mode="CONTRACT", horeca_contract_rate_per_kg=None, horeca_contract_volume_kg_month=0.0, horeca_active_accounts=0, horeca_credit_days=30, institutional_revenue_mode="CONTRACT", institutional_contract_rate_per_kg=None, institutional_awarded_volume_kg_month=0.0, institutional_contract_name="", institutional_contract_start_date="", institutional_contract_end_date="", revenue_mode="PLANNING", procurement_drivers=None, operating_model=None):
     revenue = _to_float(market_revenue, 0.0)
     shares = {
         "gt": _mix_share(channel_mix, "gt", 0.35),
@@ -977,7 +1109,7 @@ def build_channel_sales_output(market_revenue=0.0, channel_mix=None, working_day
     }
     total_share = sum(shares.values()) or 1.0
     shares = {k: v / total_share for k, v in shares.items()}
-    pricing = build_contract_pricing_output(live_bird_rate)
+    pricing = build_contract_pricing_output(live_bird_rate, procurement_drivers=procurement_drivers, operating_model=operating_model)
     horeca_rate = _to_float(horeca_contract_rate_per_kg, pricing["recommended_selling_price_per_kg"])
     inst_rate = _to_float(institutional_contract_rate_per_kg, pricing["recommended_selling_price_per_kg"])
     horeca_mix_revenue = revenue * shares["horeca"]
@@ -1099,7 +1231,7 @@ def build_channel_metrics(channel_mix, channel_registry=None):
     return {}
 
 
-def build_financial_chain(product_mix=None, channel_mix=None, product_registry=None, channel_registry=None, pricing_registry=None, cost_registry=None, revenue_rupees=0.0, avg_bird_weight=1.8, working_days=25, stage_profile=None, market_distance_km=0.0, region=None, live_bird_rate=None, yield_pct=None, avg_birds_per_trader=5000, avg_birds_per_farm=25000, plant_capacity_per_line_mt_day=10.0, working_hours_per_shift=8.0, max_shifts=3, cold_storage_buffer_days=3, utilization_threshold_pct=85.0, operating_model=None, business_stage=None):
+def build_financial_chain(product_mix=None, channel_mix=None, product_registry=None, channel_registry=None, pricing_registry=None, cost_registry=None, revenue_rupees=0.0, avg_bird_weight=1.8, working_days=25, stage_profile=None, market_distance_km=0.0, region=None, live_bird_rate=None, yield_pct=None, avg_birds_per_trader=5000, avg_birds_per_farm=25000, plant_capacity_per_line_mt_day=10.0, working_hours_per_shift=8.0, max_shifts=3, cold_storage_buffer_days=3, utilization_threshold_pct=85.0, operating_model=None, business_stage=None, procurement_drivers=None, mortality_pct=None, processing_loss_pct=None, gt_distributor_margin_pct=None, packaging_cost_per_kg=None, transport_cost_per_kg=None, trader_margin_pct=None, farm_margin_pct=None):
     revenue = _to_float(revenue_rupees, 0.0)
     channel_product_volume_output = build_channel_product_volume_output(
         revenue,
@@ -1111,18 +1243,43 @@ def build_financial_chain(product_mix=None, channel_mix=None, product_registry=N
     )
     weighted_selling_price = channel_product_volume_output["weighted_selling_price"]
     finished_goods_kg = channel_product_volume_output["total_planned_finished_goods_kg_month"]
-    weighted_yield = _to_float(yield_pct, channel_product_volume_output["weighted_yield_pct"]) / 100.0 if yield_pct is not None else channel_product_volume_output["weighted_yield_pct"] / 100.0
-    live_bird_kg = finished_goods_kg / max(0.01, weighted_yield)
+    processing_cost_per_kg = _value_from_cost_registry(cost_registry, "processing_cost_per_kg", 12.0)
+    factory_overhead_per_kg = _value_from_cost_registry(cost_registry, "factory_overhead_per_kg", 5.0)
+    target_margin_pct = _value_from_cost_registry(cost_registry, "target_margin_pct", 18.0)
+    waterfall = build_procurement_cost_waterfall(
+        live_bird_rate_per_kg=_procurement_driver_value(procurement_drivers, "live_bird_rate_per_kg", live_bird_rate if live_bird_rate is not None else _value_from_cost_registry(cost_registry, "live_bird_rate", 120.0)),
+        yield_pct=_procurement_driver_value(procurement_drivers, "yield_pct", yield_pct if yield_pct is not None else channel_product_volume_output["weighted_yield_pct"]),
+        mortality_pct=_procurement_driver_value(procurement_drivers, "mortality_pct", mortality_pct if mortality_pct is not None else 2.0),
+        processing_loss_pct=_procurement_driver_value(procurement_drivers, "processing_loss_pct", processing_loss_pct if processing_loss_pct is not None else 3.0),
+        gt_distributor_margin_pct=_procurement_driver_value(procurement_drivers, "gt_distributor_margin_pct", gt_distributor_margin_pct if gt_distributor_margin_pct is not None else 6.0),
+        packaging_cost_per_kg=_procurement_driver_value(procurement_drivers, "packaging_cost_per_kg", packaging_cost_per_kg if packaging_cost_per_kg is not None else _value_from_cost_registry(cost_registry, "packaging_cost_per_kg", 8.0)),
+        transport_cost_per_kg=_procurement_driver_value(procurement_drivers, "transport_cost_per_kg", transport_cost_per_kg if transport_cost_per_kg is not None else _value_from_cost_registry(cost_registry, "transport_cost_per_kg", 0.0)),
+        processing_cost_per_kg=processing_cost_per_kg,
+        factory_overhead_per_kg=factory_overhead_per_kg,
+        target_margin_pct=target_margin_pct,
+        operating_model=operating_model,
+        trader_margin_pct=trader_margin_pct,
+        farm_margin_pct=farm_margin_pct,
+    )
+    weighted_yield = waterfall["effective_finished_goods_yield_pct"] / 100.0
+    dressed_yield = waterfall["dressed_yield_pct"] / 100.0
+    survival_rate = waterfall["survival_rate_pct"] / 100.0
+    net_live_bird_kg = finished_goods_kg / max(0.01, weighted_yield)
+    live_bird_kg = net_live_bird_kg / max(0.01, survival_rate)
+    net_birds_required = net_live_bird_kg / max(0.1, _to_float(avg_bird_weight, 1.8))
     birds_required = live_bird_kg / max(0.1, _to_float(avg_bird_weight, 1.8))
     wd = max(1, int(_to_float(working_days, 25)))
     birds_per_day = birds_required / wd
-    rate = _live_bird_rate(live_bird_rate if live_bird_rate is not None else _value_from_cost_registry(cost_registry, "live_bird_rate", 120.0))
+    rate = waterfall["live_bird_rate_per_kg"]
     bird_procurement_cost = live_bird_kg * rate
-    processing_expense = finished_goods_kg * _value_from_cost_registry(cost_registry, "processing_cost_per_kg", 12.0)
-    packaging_expense = finished_goods_kg * _value_from_cost_registry(cost_registry, "packaging_cost_per_kg", 8.0)
+    processing_expense = finished_goods_kg * waterfall["processing_cost_per_kg"]
+    packaging_expense = finished_goods_kg * waterfall["packaging_cost_per_kg"]
+    transport_expense = finished_goods_kg * waterfall["transport_cost_per_kg"]
+    factory_overhead_expense = finished_goods_kg * waterfall["factory_overhead_per_kg"]
+    total_direct_variable_spend = bird_procurement_cost + processing_expense + packaging_expense + transport_expense
     marketing_cost = revenue * _to_float((stage_profile or {}).get("marketing_pct", 0.04) if isinstance(stage_profile, dict) else 0.04, 0.04)
     warehouse_opex = finished_goods_kg * 3.0
-    gross_contribution = revenue - bird_procurement_cost - processing_expense - packaging_expense
+    gross_contribution = revenue - total_direct_variable_spend
     ebitda = gross_contribution - marketing_cost - warehouse_opex
     pat = ebitda * 0.75
     raw = {
@@ -1131,15 +1288,36 @@ def build_financial_chain(product_mix=None, channel_mix=None, product_registry=N
         "finished_goods_kg": finished_goods_kg,
         "finished_goods_mt_day": finished_goods_kg / wd / 1000.0,
         "live_bird_kg": live_bird_kg,
+        "net_live_bird_kg": net_live_bird_kg,
         "live_weight_kg_day": live_bird_kg / wd,
+        "net_birds_required": net_birds_required,
         "birds_required": birds_required,
         "birds_per_day": birds_per_day,
         "working_days": wd,
         "weighted_yield": weighted_yield,
+        "dressed_yield": dressed_yield,
         "yield_pct": weighted_yield * 100.0,
+        "dressed_yield_pct": waterfall["dressed_yield_pct"],
+        "processing_loss_pct": waterfall["processing_loss_pct"],
+        "effective_finished_goods_yield_pct": waterfall["effective_finished_goods_yield_pct"],
+        "mortality_pct": waterfall["mortality_pct"],
+        "survival_rate_pct": waterfall["survival_rate_pct"],
         "avg_bird_weight": _to_float(avg_bird_weight, 1.8),
         "live_bird_rate": rate,
+        "live_bird_base_rate_per_kg": waterfall["live_bird_base_rate_per_kg"],
+        "gt_distributor_margin_pct": waterfall["gt_distributor_margin_pct"],
         "bird_procurement_cost": bird_procurement_cost,
+        "live_bird_procurement_spend_month": bird_procurement_cost,
+        "packaging_spend_month": packaging_expense,
+        "transport_spend_month": transport_expense,
+        "total_direct_variable_spend_month": total_direct_variable_spend,
+        "cost_waterfall": waterfall,
+        "raw_material_cost_per_finished_kg": waterfall["raw_material_cost_per_finished_kg"],
+        "total_ex_factory_cost_per_kg": waterfall["total_ex_factory_cost_per_kg"],
+        "total_delivered_cost_per_kg": waterfall["total_delivered_cost_per_kg"],
+        "recommended_ex_factory_price_per_kg": waterfall["recommended_ex_factory_price_per_kg"],
+        "recommended_delivered_price_per_kg": waterfall["recommended_delivered_price_per_kg"],
+        "procurement_driver_impact_map": PROCUREMENT_DRIVER_IMPACT_MAP,
         "channel_product_volume_output": channel_product_volume_output,
         "total_planned_finished_goods_kg_month": channel_product_volume_output["total_planned_finished_goods_kg_month"],
         "total_planned_finished_goods_mt_month": channel_product_volume_output["total_planned_finished_goods_mt_month"],
@@ -1154,6 +1332,11 @@ def build_financial_chain(product_mix=None, channel_mix=None, product_registry=N
         "revenue_rupees": revenue,
         "weighted_selling_price": weighted_selling_price,
         "weighted_yield": weighted_yield,
+        "dressed_yield": dressed_yield,
+        "dressed_yield_pct": waterfall["dressed_yield_pct"],
+        "processing_loss_pct": waterfall["processing_loss_pct"],
+        "effective_finished_goods_yield_pct": waterfall["effective_finished_goods_yield_pct"],
+        "mortality_pct": waterfall["mortality_pct"],
         "finished_goods_kg": finished_goods_kg,
         "channel_product_volume_output": channel_product_volume_output,
         "total_planned_finished_goods_kg_month": channel_product_volume_output["total_planned_finished_goods_kg_month"],
@@ -1161,13 +1344,28 @@ def build_financial_chain(product_mix=None, channel_mix=None, product_registry=N
         "total_planned_finished_goods_kg_day": channel_product_volume_output["total_planned_finished_goods_kg_day"],
         "total_planned_finished_goods_mt_day": channel_product_volume_output["total_planned_finished_goods_mt_day"],
         "live_bird_kg": live_bird_kg,
+        "net_live_bird_kg": net_live_bird_kg,
+        "net_birds_required": net_birds_required,
         "birds_required": birds_required,
         "birds_per_day": birds_per_day,
         "traders_required": max(1, math.ceil(birds_required / max(1, _to_float(avg_birds_per_trader, 5000)))),
         "farms_required": max(1, math.ceil(birds_required / max(1, _to_float(avg_birds_per_farm, 25000)))),
         "bird_procurement_cost": bird_procurement_cost,
+        "live_bird_procurement_spend_month": bird_procurement_cost,
         "processing_expense": processing_expense,
         "packaging_expense": packaging_expense,
+        "packaging_spend_month": packaging_expense,
+        "transport_expense": transport_expense,
+        "transport_spend_month": transport_expense,
+        "factory_overhead_expense": factory_overhead_expense,
+        "total_direct_variable_spend_month": total_direct_variable_spend,
+        "cost_waterfall": waterfall,
+        "raw_material_cost_per_finished_kg": waterfall["raw_material_cost_per_finished_kg"],
+        "total_ex_factory_cost_per_kg": waterfall["total_ex_factory_cost_per_kg"],
+        "total_delivered_cost_per_kg": waterfall["total_delivered_cost_per_kg"],
+        "recommended_ex_factory_price_per_kg": waterfall["recommended_ex_factory_price_per_kg"],
+        "recommended_delivered_price_per_kg": waterfall["recommended_delivered_price_per_kg"],
+        "procurement_driver_impact_map": PROCUREMENT_DRIVER_IMPACT_MAP,
         "gross_contribution": gross_contribution,
         "marketing_cost": marketing_cost,
         "warehouse_opex": warehouse_opex,
@@ -1193,7 +1391,7 @@ def build_financial_chain(product_mix=None, channel_mix=None, product_registry=N
     }
 
 
-def build_plant_planning(plant=None, assigned_markets=None, product_mix=None, channel_mix=None, product_registry=None, channel_registry=None, pricing_registry=None, cost_registry=None, avg_bird_weight=1.8, working_days=25, stage_profile=None, live_bird_rate=None, yield_pct=None, operating_model=None, business_stage=None, utilization_threshold_pct=85.0, plant_capacity_per_line_mt_day=10.0, working_hours_per_shift=8.0, max_shifts=3, cold_storage_buffer_days=3):
+def build_plant_planning(plant=None, assigned_markets=None, product_mix=None, channel_mix=None, product_registry=None, channel_registry=None, pricing_registry=None, cost_registry=None, avg_bird_weight=1.8, working_days=25, stage_profile=None, live_bird_rate=None, yield_pct=None, operating_model=None, business_stage=None, utilization_threshold_pct=85.0, plant_capacity_per_line_mt_day=10.0, working_hours_per_shift=8.0, max_shifts=3, cold_storage_buffer_days=3, procurement_drivers=None, mortality_pct=None, processing_loss_pct=None, gt_distributor_margin_pct=None, packaging_cost_per_kg=None, transport_cost_per_kg=None, trader_margin_pct=None, farm_margin_pct=None):
     assigned_revenue = 0.0
     if assigned_markets is not None and not getattr(assigned_markets, "empty", True):
         for col in ("revenue_allocation_cr", "monthly_revenue", "revenue", "assigned_market_revenue", "target_revenue"):
@@ -1204,7 +1402,7 @@ def build_plant_planning(plant=None, assigned_markets=None, product_mix=None, ch
                 break
     if assigned_revenue <= 0:
         assigned_revenue = _to_float((stage_profile or {}).get("revenue_rupees", 60000000.0) if isinstance(stage_profile, dict) else 60000000.0, 60000000.0)
-    result = build_financial_chain(product_mix, channel_mix, product_registry, channel_registry, pricing_registry, cost_registry, assigned_revenue, avg_bird_weight, working_days, stage_profile, live_bird_rate=live_bird_rate, yield_pct=yield_pct, plant_capacity_per_line_mt_day=plant_capacity_per_line_mt_day, working_hours_per_shift=working_hours_per_shift, max_shifts=max_shifts, cold_storage_buffer_days=cold_storage_buffer_days, utilization_threshold_pct=utilization_threshold_pct, operating_model=operating_model, business_stage=business_stage)
+    result = build_financial_chain(product_mix, channel_mix, product_registry, channel_registry, pricing_registry, cost_registry, assigned_revenue, avg_bird_weight, working_days, stage_profile, live_bird_rate=live_bird_rate, yield_pct=yield_pct, plant_capacity_per_line_mt_day=plant_capacity_per_line_mt_day, working_hours_per_shift=working_hours_per_shift, max_shifts=max_shifts, cold_storage_buffer_days=cold_storage_buffer_days, utilization_threshold_pct=utilization_threshold_pct, operating_model=operating_model, business_stage=business_stage, procurement_drivers=procurement_drivers, mortality_pct=mortality_pct, processing_loss_pct=processing_loss_pct, gt_distributor_margin_pct=gt_distributor_margin_pct, packaging_cost_per_kg=packaging_cost_per_kg, transport_cost_per_kg=transport_cost_per_kg, trader_margin_pct=trader_margin_pct, farm_margin_pct=farm_margin_pct)
     result["assigned_market_revenue"] = assigned_revenue
     return result
 

@@ -1096,6 +1096,15 @@ def render_distributor_channel_drilldown(kpi_name):
         st.write("General Trade sales executives required to manage distributor-led outlet coverage and beat execution.")
         render_display_dataframe(st, "gt_sales_executives_detail", pd.DataFrame([
             {"Item": "GT revenue", "Value": fmt_currency(gt["revenue"])},
+            {"Item": "GT planned revenue", "Value": fmt_currency(gt["revenue"])} ,
+            {"Item": "Pricing basis", "Value": gt.get("gt_pricing_basis", "Distributor selling value")},
+            {"Item": "Distributor margin %", "Value": f"{gt.get('gt_distributor_margin_pct', 0.0):,.1f}%"},
+            {"Item": "Distributor margin value", "Value": fmt_currency(gt.get("gt_distributor_margin_value", 0.0))},
+            {"Item": "Company net realization", "Value": fmt_currency(gt.get("gt_company_net_realization", gt["revenue"]))},
+            {"Item": "Company net realization / kg", "Value": f"{fmt_currency_plain(gt.get('gt_company_net_realization_per_kg', 0.0), 2)}/kg"},
+            {"Item": "GT volume", "Value": f"{gt.get('gt_volume_kg', 0.0):,.0f} kg/month"},
+            {"Item": "GT variable cost", "Value": fmt_currency(gt.get("gt_variable_cost", 0.0))},
+            {"Item": "GT gross contribution", "Value": fmt_currency(gt.get("gt_gross_contribution", 0.0))},
             {"Item": "Required distributors", "Value": f"{gt['required_distributors']:,.0f}"},
             {"Item": "Actual active distributors", "Value": "Not Connected" if active_distributors is None else f"{active_distributors:,.0f}"},
             {"Item": "Distributor gap", "Value": "Not Available" if gt["coverage_gap_distributors"] is None else f"{gt['coverage_gap_distributors']:,.0f}"},
@@ -1110,6 +1119,7 @@ def render_distributor_channel_drilldown(kpi_name):
             {"Item": "Supported revenue", "Value": fmt_currency(gt["supported_revenue"])},
             {"Item": "Revenue at risk", "Value": fmt_currency(gt["revenue_at_risk"])},
         ]), hide_index=True, width="stretch")
+        st.write("Pricing convention: GT planned revenue is treated as distributor selling value, so company realization is shown net of GT distributor margin for economics and contribution tracking.")
         if active_distributors is None:
             st.write("Actual distributor count is not connected. PBOS is showing the planning requirement.")
         st.write("CEO recommendation:")
@@ -1606,10 +1616,20 @@ with st.sidebar:
         yield_pct = st.number_input("Yield %", min_value=float(0.0), max_value=float(100.0), value=get_assumption(assumptions, ["YIELD_PCT"], as_float(72.0)), step=float(1.0))
         mortality_pct = st.number_input("Mortality %", min_value=float(0.0), max_value=float(100.0), value=get_assumption(assumptions, ["MORTALITY_PCT"], as_float(4.0)), step=float(0.5))
         processing_loss_pct = st.number_input("Processing Loss %", min_value=float(0.0), max_value=float(100.0), value=get_assumption(assumptions, ["PROCESSING_LOSS_PCT"], as_float(3.0)), step=float(0.5))
-        trader_margin_pct = st.number_input("Trader Margin %", min_value=float(0.0), max_value=float(100.0), value=get_assumption(assumptions, ["TRADER_MARGIN_PCT"], as_float(6.0)), step=float(0.5))
-        farm_margin_pct = st.number_input("Farm Margin %", min_value=float(0.0), max_value=float(100.0), value=get_assumption(assumptions, ["FARM_MARGIN_PCT"], as_float(4.0)), step=float(0.5))
+        gt_distributor_margin_pct = st.number_input("GT Distributor Margin %", min_value=float(0.0), max_value=float(100.0), value=get_assumption(assumptions, ["TRADER_MARGIN_PCT", "GT_DISTRIBUTOR_MARGIN_PCT"], as_float(6.0)), step=float(0.5), key="trader_margin_pct")
+        st.caption("Applies only to General Trade distributor economics. It does not alter live-bird procurement cost.")
         packaging_cost = st.number_input("Packaging Cost (₹/kg)", min_value=float(0.0), max_value=float(250.0), value=get_assumption(assumptions, ["PACKAGING_COST_PER_KG"], as_float(18.0)), step=float(1.0))
         transport_cost = st.number_input("Transport Cost (₹/kg)", min_value=float(0.0), max_value=float(250.0), value=get_assumption(assumptions, ["TRANSPORT_COST_PER_KG"], as_float(12.0)), step=float(1.0))
+
+    procurement_drivers = {
+        "live_bird_rate_per_kg": live_bird_rate,
+        "yield_pct": yield_pct,
+        "mortality_pct": mortality_pct,
+        "processing_loss_pct": processing_loss_pct,
+        "gt_distributor_margin_pct": gt_distributor_margin_pct,
+        "packaging_cost_per_kg": packaging_cost,
+        "transport_cost_per_kg": transport_cost,
+    }
 
     with st.expander("E. Plant & Manufacturing Assumptions", expanded=False):
         st.subheader("Operational Assumptions")
@@ -1657,7 +1677,7 @@ with st.sidebar:
 
         st.subheader("HoReCa Contract Revenue")
         horeca_revenue_mode = st.selectbox("HoReCa Revenue Mode", ["CONTRACT", "MIX_ALLOCATION"], index=0)
-        dynamic_contract_pricing = build_contract_pricing_output(live_bird_rate)
+        dynamic_contract_pricing = build_contract_pricing_output(live_bird_rate, procurement_drivers=procurement_drivers, operating_model=operating_model)
         recommended_contract_rate_per_kg = float(dynamic_contract_pricing["contract_rate_per_kg"])
         horeca_contract_rate_per_kg = st.number_input("HoReCa Contract Rate (₹/kg)", min_value=float(0.01), max_value=float(1000.0), value=recommended_contract_rate_per_kg, step=float(1.0), disabled=True)
         horeca_contract_volume_kg_month = st.number_input("HoReCa Contract Volume (kg/month)", min_value=float(0.0), max_value=float(1_000_000.0), value=float(5_000.0), step=float(500.0))
@@ -1779,8 +1799,20 @@ if abs(product_total - 100) > 0.01:
     issues.append("Product Mix must equal 100%.")
 if abs(channel_total - 100) > 0.01:
     issues.append("Channel Mix must equal 100%.")
+if live_bird_rate < 0:
+    issues.append("Live Bird Rate must be greater than or equal to 0.")
 if yield_pct <= 0 or yield_pct > 100:
     issues.append("Yield % must be greater than 0 and less than or equal to 100.")
+if mortality_pct < 0 or mortality_pct >= 100:
+    issues.append("Mortality % must be greater than or equal to 0 and less than 100.")
+if processing_loss_pct < 0 or processing_loss_pct >= 100:
+    issues.append("Processing Loss % must be greater than or equal to 0 and less than 100.")
+if gt_distributor_margin_pct < 0:
+    issues.append("GT Distributor Margin % must be greater than or equal to 0.")
+if packaging_cost < 0:
+    issues.append("Packaging Cost must be greater than or equal to 0.")
+if transport_cost < 0:
+    issues.append("Transport Cost must be greater than or equal to 0.")
 if market_registry.empty:
     issues.append("Add at least one market before planning.")
 else:
@@ -1824,6 +1856,12 @@ for _, plant in active_plants.iterrows():
         stage_profile=stage,
         live_bird_rate=live_bird_rate,
         yield_pct=yield_pct,
+        procurement_drivers=procurement_drivers,
+        mortality_pct=mortality_pct,
+        processing_loss_pct=processing_loss_pct,
+        gt_distributor_margin_pct=gt_distributor_margin_pct,
+        packaging_cost_per_kg=packaging_cost,
+        transport_cost_per_kg=transport_cost,
         operating_model=operating_model,
         business_stage=business_stage,
         plant_capacity_per_line_mt_day=plant_capacity_per_line_mt_day,
@@ -1875,6 +1913,12 @@ market_results = build_financial_chain(
     market_distance_km=market_distance_km,
     live_bird_rate=live_bird_rate,
     yield_pct=yield_pct,
+    procurement_drivers=procurement_drivers,
+    mortality_pct=mortality_pct,
+    processing_loss_pct=processing_loss_pct,
+    gt_distributor_margin_pct=gt_distributor_margin_pct,
+    packaging_cost_per_kg=packaging_cost,
+    transport_cost_per_kg=transport_cost,
     plant_capacity_per_line_mt_day=plant_capacity_per_line_mt_day,
     working_hours_per_shift=working_hours_per_shift,
     max_shifts=max_shifts,
@@ -1934,6 +1978,8 @@ channel_sales_output = build_channel_sales_output(
     calls_per_sales_executive_day=calls_per_sales_executive_day,
     distributor_output=distributor_output,
     business_stage=business_stage,
+    procurement_drivers=procurement_drivers,
+    operating_model=operating_model,
     live_bird_rate=live_bird_rate,
     horeca_revenue_mode=horeca_revenue_mode,
     horeca_contract_rate_per_kg=horeca_contract_rate_per_kg,
@@ -2091,6 +2137,27 @@ for channel_label, revenue_key in {
 }.items():
     planned_channel_volume_kg[channel_label] = float(channel_volume_output.get(revenue_key, {}).get("total_kg_month", 0.0) or 0.0)
 
+gt_planned_revenue = float(channel_sales_output.get("general_trade", {}).get("revenue", 0.0) or 0.0)
+gt_volume_kg = planned_channel_volume_kg.get("GT", 0.0)
+gt_pricing_basis = "Distributor selling value"
+gt_distributor_margin_value = gt_planned_revenue * (gt_distributor_margin_pct / 100.0)
+gt_company_net_realization = max(0.0, gt_planned_revenue - gt_distributor_margin_value)
+gt_company_net_realization_per_kg = gt_company_net_realization / max(1.0, gt_volume_kg)
+total_variable_cost_per_kg = results["total_direct_variable_spend_month"] / max(1.0, results["finished_goods_kg"])
+gt_variable_cost = gt_volume_kg * total_variable_cost_per_kg
+gt_gross_contribution = gt_company_net_realization - gt_variable_cost
+
+channel_sales_output["general_trade"].update({
+    "gt_distributor_margin_pct": gt_distributor_margin_pct,
+    "gt_distributor_margin_value": gt_distributor_margin_value,
+    "gt_pricing_basis": gt_pricing_basis,
+    "gt_company_net_realization": gt_company_net_realization,
+    "gt_company_net_realization_per_kg": gt_company_net_realization_per_kg,
+    "gt_volume_kg": gt_volume_kg,
+    "gt_variable_cost": gt_variable_cost,
+    "gt_gross_contribution": gt_gross_contribution,
+})
+
 with st.sidebar.expander("G. Order Scenario Testing", expanded=False):
     order_scenario_mode = st.selectbox("Order Scenario Mode", ["No Scenario", "Channel Achievement %", "Manual Order Volume"], index=0)
     channel_achievement_pct = {}
@@ -2154,14 +2221,15 @@ production_lines = plant_capacity_output["production_lines_required"]
 employees = manpower_output["total_employees"]
 warehouse_need = results["warehouse_need"]
 distribution_centre_need = results["distribution_centre_need"]
-procurement_spend = results["bird_procurement_cost"] + results["processing_expense"] + results["packaging_expense"]
-trader_margin_cost = procurement_spend * (trader_margin_pct / 100.0)
-farm_margin_cost = procurement_spend * (farm_margin_pct / 100.0)
-gross_contribution = results["gross_contribution"]
+live_bird_procurement_spend = results["live_bird_procurement_spend_month"]
+packaging_spend = results["packaging_spend_month"]
+transport_spend = results["transport_spend_month"]
+procurement_spend = results["total_direct_variable_spend_month"]
+gross_contribution = results["gross_contribution"] - gt_distributor_margin_value
 marketing_spend = results["marketing_cost"]
 warehouse_opex = results["warehouse_opex"]
-ebitda = results["ebitda"]
-pat = results["pat"]
+ebitda = results["ebitda"] - gt_distributor_margin_value
+pat = ebitda * 0.75
 working_capital = results["working_capital"]
 capex = production_lines * stage["capex_per_line"]
 
@@ -2194,6 +2262,67 @@ def show_corporate_manpower_drilldown():
     else:
         with st.expander("Corporate Manpower", expanded=True):
             render_corporate_manpower_drilldown()
+
+
+def render_procurement_driver_drilldown():
+    waterfall = results.get("cost_waterfall", {})
+    impact_map = results.get("procurement_driver_impact_map", {})
+    st.write("Input assumptions")
+    render_display_dataframe(st, "procurement_driver_assumptions", pd.DataFrame([
+        {"Driver": "Live Bird Rate", "Value": fmt_rate_per_kg(waterfall.get("live_bird_base_rate_per_kg", live_bird_rate))},
+        {"Driver": "Dressed Yield", "Value": f"{waterfall.get('dressed_yield_pct', yield_pct):,.1f}%"},
+        {"Driver": "Mortality", "Value": f"{waterfall.get('mortality_pct', mortality_pct):,.1f}%"},
+        {"Driver": "Processing Loss", "Value": f"{waterfall.get('processing_loss_pct', processing_loss_pct):,.1f}%"},
+        {"Driver": "Effective Finished-Goods Yield", "Value": f"{waterfall.get('effective_finished_goods_yield_pct', results.get('weighted_yield', 0.0) * 100.0):,.1f}%"},
+        {"Driver": "Packaging Cost", "Value": f"{fmt_currency_plain(waterfall.get('packaging_cost_per_kg', packaging_cost), 2)}/kg"},
+        {"Driver": "Transport Cost", "Value": f"{fmt_currency_plain(waterfall.get('transport_cost_per_kg', transport_cost), 2)}/kg"},
+        {"Driver": "Sourcing Assumption", "Value": waterfall.get("sourcing_assumption", "MVP sourcing route assumption")},
+    ]), hide_index=True, width="stretch")
+    st.write("Quantity impact")
+    render_display_dataframe(st, "procurement_quantity_impact", pd.DataFrame([
+        {"Metric": "Finished goods", "Value": f"{finished_goods_kg:,.0f} kg/month"},
+        {"Metric": "Net birds required before mortality", "Value": f"{results.get('net_birds_required', 0.0):,.0f}"},
+        {"Metric": "Gross birds required after mortality", "Value": f"{birds_required:,.0f}"},
+        {"Metric": "Live weight required", "Value": f"{live_weight_kg:,.0f} kg/month"},
+        {"Metric": "Birds/day", "Value": f"{birds_per_day:,.0f}"},
+    ]), hide_index=True, width="stretch")
+    st.write("Cost impact")
+    render_display_dataframe(st, "procurement_cost_impact", pd.DataFrame([
+        {"Metric": "Live Bird Rate", "Value": f"{fmt_currency_plain(waterfall.get('live_bird_rate_per_kg', live_bird_rate), 2)}/kg"},
+        {"Metric": "Raw-material cost/kg", "Value": f"{fmt_currency_plain(waterfall.get('raw_material_cost_per_finished_kg', 0.0), 2)}/kg"},
+        {"Metric": "Packaging cost/kg", "Value": f"{fmt_currency_plain(waterfall.get('packaging_cost_per_kg', 0.0), 2)}/kg"},
+        {"Metric": "Transport cost/kg", "Value": f"{fmt_currency_plain(waterfall.get('transport_cost_per_kg', 0.0), 2)}/kg"},
+        {"Metric": "Ex-factory cost/kg", "Value": f"{fmt_currency_plain(waterfall.get('total_ex_factory_cost_per_kg', 0.0), 2)}/kg"},
+        {"Metric": "Delivered cost/kg", "Value": f"{fmt_currency_plain(waterfall.get('total_delivered_cost_per_kg', 0.0), 2)}/kg"},
+        {"Metric": "Recommended delivered price/kg", "Value": f"{fmt_currency_plain(waterfall.get('recommended_delivered_price_per_kg', 0.0), 0)}/kg"},
+    ]), hide_index=True, width="stretch")
+    st.write("KPI impact")
+    render_display_dataframe(st, "procurement_kpi_impact", pd.DataFrame([
+        {"KPI": "Live Bird Procurement Spend", "Value": fmt_currency(live_bird_procurement_spend)},
+        {"KPI": "Packaging Spend", "Value": fmt_currency(packaging_spend)},
+        {"KPI": "Transport Spend", "Value": fmt_currency(transport_spend)},
+        {"KPI": "Total Direct Variable Spend", "Value": fmt_currency(procurement_spend)},
+        {"KPI": "Gross Contribution", "Value": fmt_currency(gross_contribution)},
+        {"KPI": "EBITDA", "Value": fmt_currency(ebitda)},
+        {"KPI": "PAT", "Value": fmt_currency(pat)},
+    ]), hide_index=True, width="stretch")
+    st.write("Driver impact map")
+    render_display_dataframe(st, "procurement_driver_impact_map", pd.DataFrame([
+        {"Driver": driver, "Affected KPIs": ", ".join(affected)}
+        for driver, affected in impact_map.items()
+    ]), hide_index=True, width="stretch")
+
+
+def show_procurement_driver_drilldown():
+    if hasattr(st, "dialog"):
+        @st.dialog("Procurement Driver Impact")
+        def _procurement_dialog():
+            render_procurement_driver_drilldown()
+
+        _procurement_dialog()
+    else:
+        with st.expander("Procurement Driver Impact", expanded=True):
+            render_procurement_driver_drilldown()
 
 
 log_section_start("Corporate Summary")
@@ -2494,12 +2623,19 @@ with proc_col3:
     render_kpi_card("Birds / Day", fmt_birds(birds_per_day, "day"), subtitle="Live bird demand", icon_key="birds_day")
 with proc_col4:
     render_kpi_card("Live Weight / Day", f"{live_weight_kg / working_days:,.0f} kg", subtitle="Daily live weight", icon_key="live_weight_day")
-proc_col5, proc_col6, proc_col7 = st.columns(3)
+proc_col5, proc_col6, proc_col7, proc_col8 = st.columns(4)
 with proc_col5:
-    render_kpi_card("Procurement Spend / Month", fmt_currency(procurement_spend), subtitle="Bird + processing + packing", icon_key="procurement_spend")
+    render_kpi_card("Live Bird Procurement Spend", fmt_currency(live_bird_procurement_spend), subtitle="Live bird landed spend", icon_key="procurement_spend", button_label="View details", key="procurement_driver_details", button_action=show_procurement_driver_drilldown)
 with proc_col6:
-    render_kpi_card("Traders Required", f"{traders_required:,.0f}", subtitle="Supply sourcing support", icon_key="traders_required")
+    render_kpi_card("Packaging Spend", fmt_currency(packaging_spend), subtitle=f"{fmt_currency_plain(results['cost_waterfall']['packaging_cost_per_kg'], 0)}/kg finished goods", icon_key="procurement_spend")
 with proc_col7:
+    render_kpi_card("Transport Spend", fmt_currency(transport_spend), subtitle=f"{fmt_currency_plain(results['cost_waterfall']['transport_cost_per_kg'], 0)}/kg finished goods", icon_key="procurement_spend")
+with proc_col8:
+    render_kpi_card("Total Direct Variable Spend", fmt_currency(procurement_spend), subtitle="Bird + processing + packing + transport", icon_key="procurement_spend", button_label="View details", key="procurement_total_direct_details", button_action=show_procurement_driver_drilldown)
+proc_col9, proc_col10 = st.columns(2)
+with proc_col9:
+    render_kpi_card("Traders Required", f"{traders_required:,.0f}", subtitle="Supply sourcing support", icon_key="traders_required")
+with proc_col10:
     render_kpi_card("Farms Required", f"{farms_required:,.0f}", subtitle="Supply base support", icon_key="farms_required")
 st.markdown("</div>", unsafe_allow_html=True)
 log_section_end("Raw Material & Procurement Planning")
@@ -2755,7 +2891,7 @@ chain_cols = st.columns(5)
 with chain_cols[0]:
     render_kpi_card("Revenue", fmt_currency(revenue_rupees), subtitle="Starting point", icon_key="revenue")
 with chain_cols[1]:
-    render_kpi_card("Procurement Spend", fmt_currency(procurement_spend), subtitle="Less spend", icon_key="procurement_spend")
+    render_kpi_card("Direct Variable Spend", fmt_currency(procurement_spend), subtitle="Bird + processing + packing + transport", icon_key="procurement_spend", button_label="View details", key="financial_procurement_driver_details", button_action=show_procurement_driver_drilldown)
 with chain_cols[2]:
     render_kpi_card("Gross Contribution", fmt_currency(gross_contribution), subtitle="Gross contribution", icon_key="gross_contribution", value_class="negative" if gross_contribution < 0 else None)
 with chain_cols[3]:
@@ -2776,7 +2912,7 @@ st.markdown(
         <div class='pbos-ceo-summary'>
             <div class='pbos-ceo-row'><b>Current Plan:</b> {selected_plant_name} is serving {selected_market_name} with planned revenue of {fmt_currency(revenue_rupees)}.</div>
             <div class='pbos-ceo-row'><b>Key Constraint:</b> {key_constraint} Current utilization is {plant_capacity_output['plant_utilization_pct']:,.1f}%.</div>
-            <div class='pbos-ceo-row'><b>Financial Signal:</b> Procurement spend {fmt_currency(procurement_spend)}, gross contribution {fmt_currency(gross_contribution)}, EBITDA {fmt_currency(ebitda)}, PAT {fmt_currency(pat)}.</div>
+            <div class='pbos-ceo-row'><b>Financial Signal:</b> Direct variable spend {fmt_currency(procurement_spend)}, gross contribution {fmt_currency(gross_contribution)}, EBITDA {fmt_currency(ebitda)}, PAT {fmt_currency(pat)}.</div>
             <div class='pbos-ceo-row'><b>Recommended Management Action:</b> Maintain staffing and cold-chain readiness, and monitor live-bird rate sensitivity. Current calculated pricing status is {horeca_pricing.get('pricing_status', 'Not Available')} at an achieved margin of {horeca_pricing.get('actual_margin_pct', 0.0):,.1f}%.</div>
         </div>
         """,
