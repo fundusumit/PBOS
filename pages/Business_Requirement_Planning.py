@@ -735,17 +735,24 @@ def render_order_capacity_drilldown():
         st.write("Scenario orders are user-entered planning assumptions and are not confirmed ERP purchase orders.")
 
     st.write(order_capacity_intelligence["business_impact"])
+    st.write(order_capacity_intelligence.get("scenario_variance_explanation", order_capacity_intelligence.get("demand_variance_explanation", "Scenario demand is aligned with the channel-mix planning baseline.")))
     st.write(order_capacity_intelligence.get("observation_status", "Scenario persistence is simulated and not yet connected to historical daily order history."))
+    st.write("Consolidated demand summary")
+    st.dataframe(pd.DataFrame([
+        {"Metric": "Planned Demand", "Value": f"{order_capacity_intelligence.get('planned_demand_mt_day', 0.0):,.2f} MT/day"},
+        {"Metric": "Scenario Demand", "Value": f"{order_capacity_intelligence.get('scenario_order_demand_mt_day', 0.0):,.2f} MT/day"},
+        {"Metric": "Net Variance", "Value": f"{order_capacity_intelligence.get('demand_variance_mt_day', 0.0):+,.2f} MT/day"},
+        {"Metric": "Overall Achievement", "Value": f"{order_capacity_intelligence.get('overall_achievement_pct', 0.0):,.1f}%"},
+    ]), hide_index=True, width="stretch")
     st.write("Channel-wise planned vs scenario orders")
     channel_rows = []
     for channel, data in order_capacity_intelligence.get("channel_results", order_capacity_intelligence["channel_planned_vs_actual"]).items():
         channel_rows.append({
             "Channel": channel,
-            "Planned Volume MT/day": f"{data.get('planned_volume_mt_day', data['planned_volume_kg'] / 1000.0):,.1f}",
-            "Scenario Orders MT/day": f"{data.get('scenario_order_mt_day', data.get('actual_order_kg', data.get('actual_order_volume_kg', 0.0)) / 1000.0):,.1f}",
+            "Planned MT/day": f"{data.get('planned_demand_mt_day', data.get('planned_volume_mt_day', data['planned_volume_kg'] / 1000.0)):,.2f}",
+            "Scenario MT/day": f"{data.get('scenario_demand_mt_day', data.get('scenario_order_mt_day', data.get('actual_order_kg', data.get('actual_order_volume_kg', 0.0)) / 1000.0)):,.2f}",
+            "Variance MT/day": f"{data.get('variance_mt_day', (data.get('actual_order_kg', data.get('actual_order_volume_kg', 0.0)) - data.get('planned_volume_kg', 0.0)) / 1000.0):+,.2f}",
             "Achievement %": f"{data['achievement_pct']:,.1f}%",
-            "Shortfall MT/day": f"{data.get('shortfall_mt_day', data['shortfall_kg'] / 1000.0):,.1f}",
-            "Excess MT/day": f"{data.get('excess_mt_day', data['excess_kg'] / 1000.0):,.1f}",
             "Status": data.get("status", ""),
             "Commercial Comment": data.get("commercial_comment", ""),
         })
@@ -2279,9 +2286,9 @@ with order_col1:
 with order_col2:
     render_kpi_card("Order Source", order_capacity_intelligence.get("order_source", "NONE"), subtitle="Planning source", icon_key="order_source")
 with order_col3:
-    render_kpi_card("Planned Demand", f"{order_capacity_intelligence['planned_demand_mt_day']:,.1f} MT/day", subtitle="Channel mix demand", icon_key="planned_demand")
+    render_kpi_card("Planned Demand", f"{order_capacity_intelligence['planned_demand_mt_day']:,.2f} MT/day", subtitle="Channel mix demand", icon_key="planned_demand")
 with order_col4:
-    render_kpi_card("Scenario Order Demand", f"{order_capacity_intelligence['scenario_order_demand_mt_day']:,.1f} MT/day", subtitle="Scenario demand", icon_key="scenario_orders")
+    render_kpi_card("Scenario Order Demand", f"{order_capacity_intelligence['scenario_order_demand_mt_day']:,.2f} MT/day", subtitle="Scenario demand", icon_key="scenario_orders")
 order_col5, order_col6, order_col7, order_col8 = st.columns(4)
 with order_col5:
     render_kpi_card("Overall Achievement %", f"{order_capacity_intelligence['overall_achievement_pct']:,.1f}%", subtitle="Scenario vs plan", icon_key="achievement")
@@ -2291,14 +2298,28 @@ with order_col7:
     render_kpi_card("Available Plant Capacity", f"{order_capacity_intelligence['available_plant_capacity_mt_day']:,.1f} MT/day", subtitle="Production capacity", icon_key="available_plant_capacity")
 with order_col8:
     render_kpi_card("Total Fulfilment Capability", f"{order_capacity_intelligence['total_fulfilment_capability_mt']:,.1f} MT", subtitle="Plant + releasable stock", icon_key="capacity_gap")
+variance_mt_day = order_capacity_intelligence.get("demand_variance_mt_day", 0.0)
+variance_kg_day = order_capacity_intelligence.get("demand_variance_kg_day", 0.0)
+variance_status = order_capacity_intelligence.get("demand_variance_status", "On Plan")
+if variance_status == "Above Plan":
+    variance_subtitle = f"{abs(variance_kg_day):,.0f} kg/day above plan"
+elif variance_status == "Below Plan":
+    variance_subtitle = f"{abs(variance_kg_day):,.0f} kg/day below plan"
+elif variance_status == "Not Simulated":
+    variance_subtitle = "Not simulated"
+else:
+    variance_subtitle = "On plan"
 order_col9, order_col10, order_col11, order_col12 = st.columns(4)
 with order_col9:
-    render_kpi_card("Production Required", f"{order_capacity_intelligence['production_required_mt_day']:,.1f} MT/day", subtitle="After inventory release", icon_key="available_plant_capacity")
+    render_kpi_card("Demand Variance", f"{variance_mt_day:+,.2f} MT/day", subtitle=variance_subtitle, status=variance_status, status_type="pbos-status-positive" if variance_status == "On Plan" else "pbos-status-neutral" if variance_status == "Not Simulated" else "pbos-status-warn", icon_key="scenario_orders")
 with order_col10:
-    render_kpi_card("Capacity Gap / Surplus", f"{order_capacity_intelligence['capacity_gap_mt']:,.1f} MT", subtitle="Supply minus orders", icon_key="capacity_gap")
+    render_kpi_card("Production Required", f"{order_capacity_intelligence['production_required_mt_day']:,.1f} MT/day", subtitle="After inventory release", icon_key="available_plant_capacity")
 with order_col11:
-    render_kpi_card("Scenario Plant Utilization", f"{order_capacity_intelligence['scenario_plant_utilization_pct']:,.1f}%", subtitle="Against installed capacity", icon_key="scenario_plant_utilization")
+    render_kpi_card("Capacity Gap / Surplus", f"{order_capacity_intelligence['capacity_gap_mt']:,.1f} MT", subtitle="Supply minus orders", icon_key="capacity_gap")
 with order_col12:
+    render_kpi_card("Scenario Plant Utilization", f"{order_capacity_intelligence['scenario_plant_utilization_pct']:,.1f}%", subtitle="Against installed capacity", icon_key="scenario_plant_utilization")
+order_col13, _, _, _ = st.columns(4)
+with order_col13:
     capacity_status = order_capacity_intelligence.get("capacity_status", order_capacity_intelligence["status"])
     capacity_status_label = "Not Simulated" if capacity_status == "NOT_SIMULATED" else capacity_status
     render_kpi_card("Capacity Status", capacity_status_label, subtitle=order_capacity_intelligence["warning_type"], status=order_capacity_intelligence["persistence_status"], status_type="pbos-status-positive" if capacity_status == "HEALTHY" else "pbos-status-warn", button_label="View details", key="order_capacity_intelligence_details", button_action=show_order_capacity_drilldown, icon_key="capacity_status")

@@ -576,6 +576,12 @@ def build_order_capacity_intelligence(
             "planned_demand_mt_day": 0.0,
             "scenario_order_demand_kg": 0.0,
             "scenario_order_demand_mt_day": 0.0,
+            "demand_variance_kg_day": 0.0,
+            "demand_variance_mt_day": 0.0,
+            "demand_variance_pct": 0.0,
+            "demand_variance_status": "Not Simulated",
+            "demand_variance_explanation": "No order scenario has been activated.",
+            "scenario_variance_explanation": "No order scenario has been activated.",
             "actual_order_demand_kg": 0.0,
             "actual_order_demand_mt": 0.0,
             "overall_achievement_pct": 0.0,
@@ -649,6 +655,16 @@ def build_order_capacity_intelligence(
     scenario_order_kg_day = sum(scenario_kg_day.values())
     planned_demand_mt_day = planned_demand_kg_day / 1000.0
     scenario_order_mt_day = scenario_order_kg_day / 1000.0
+    demand_variance_kg_day = scenario_order_kg_day - planned_demand_kg_day
+    demand_variance_mt_day = scenario_order_mt_day - planned_demand_mt_day
+    demand_variance_pct = (demand_variance_mt_day / planned_demand_mt_day * 100.0) if planned_demand_mt_day > 0 else 0.0
+    tolerance_mt_day = 0.0005
+    if demand_variance_mt_day > tolerance_mt_day:
+        demand_variance_status = "Above Plan"
+    elif demand_variance_mt_day < -tolerance_mt_day:
+        demand_variance_status = "Below Plan"
+    else:
+        demand_variance_status = "On Plan"
     available_inventory_mt = max(0.0, _to_float(releasable_cold_inventory_mt, 0.0))
     if available_inventory_mt <= 0 and available_finished_goods_inventory_kg:
         available_inventory_mt = max(0.0, _to_float(available_finished_goods_inventory_kg, 0.0)) / 1000.0
@@ -715,9 +731,14 @@ def build_order_capacity_intelligence(
         channel_results[channel] = {
             "planned_volume_kg": planned,
             "planned_volume_mt_day": planned / 1000.0,
+            "planned_demand_mt_day": planned / 1000.0,
             "actual_order_volume_kg": actual,
             "actual_order_kg": actual,
             "scenario_order_mt_day": actual / 1000.0,
+            "scenario_demand_mt_day": actual / 1000.0,
+            "variance_kg_day": actual - planned,
+            "variance_mt_day": (actual - planned) / 1000.0,
+            "contribution_to_total_variance_mt_day": (actual - planned) / 1000.0,
             "achievement_pct": pct,
             "shortfall_kg": shortfall,
             "shortfall_mt_day": shortfall / 1000.0,
@@ -771,6 +792,16 @@ def build_order_capacity_intelligence(
         ceo_summary = f"Scenario orders require only {utilization_pct:,.1f}% of available daily plant capacity, creating fixed-cost absorption risk."
     else:
         ceo_summary = "Scenario demand is within the selected daily plant capacity and releasable inventory assumptions."
+    offset_channels = [channel for channel, data in channel_results.items() if data.get("variance_mt_day", 0.0) > 0.000001]
+    shortfall_channels = [channel for channel, data in channel_results.items() if data.get("variance_mt_day", 0.0) < -0.000001]
+    if offset_channels and shortfall_channels:
+        scenario_variance_explanation = f"{', '.join(offset_channels)} overachievement partly offsets {', '.join(shortfall_channels)} shortfalls. Consolidated scenario demand is {abs(demand_variance_pct):,.1f}% {'above' if demand_variance_pct > 0 else 'below'} plan."
+    elif offset_channels:
+        scenario_variance_explanation = f"{', '.join(offset_channels)} overachievement lifts consolidated scenario demand {abs(demand_variance_pct):,.1f}% above plan."
+    elif shortfall_channels:
+        scenario_variance_explanation = f"{', '.join(shortfall_channels)} shortfalls reduce consolidated scenario demand {abs(demand_variance_pct):,.1f}% below plan."
+    else:
+        scenario_variance_explanation = "Scenario demand is aligned with the channel-mix planning baseline."
     actual_order_output = build_actual_order_output(operating_mode="EMPTY")
     actual_order_output["demand_by_channel"] = scenario_kg_day
     actual_order_output["actual_order_demand_kg"] = scenario_order_kg_day
@@ -788,6 +819,12 @@ def build_order_capacity_intelligence(
         "planned_demand_mt_day": planned_demand_mt_day,
         "scenario_order_demand_kg": scenario_order_kg_day,
         "scenario_order_demand_mt_day": scenario_order_mt_day,
+        "demand_variance_kg_day": demand_variance_kg_day,
+        "demand_variance_mt_day": demand_variance_mt_day,
+        "demand_variance_pct": demand_variance_pct,
+        "demand_variance_status": demand_variance_status,
+        "demand_variance_explanation": scenario_variance_explanation,
+        "scenario_variance_explanation": scenario_variance_explanation,
         "actual_order_demand_kg": scenario_order_kg_day,
         "actual_order_demand_mt": scenario_order_mt_day,
         "overall_achievement_pct": achievement_pct,
