@@ -525,8 +525,8 @@ st.markdown("<div class='pbos-demo-note'><b>Demo note:</b> This public version u
 st.markdown(
         """
         <div class='pbos-page-section-heading'>
-            <h2>Business Requirement Planning</h2>
-            <p>Scenario-based planning for revenue, channels, capacity, procurement, manpower and profitability.</p>
+            <h2>Business Strategic Planning</h2>
+            <p>Scenario-based strategic planning for revenue, product portfolios, channels, plant capacity, procurement, logistics, manpower and profitability.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -774,9 +774,8 @@ LOGISTICS_ICON_KEYS = {
 DISTRIBUTION_ICON_KEYS = {
     "Fresh Chilled Business": "frozen_raw_business",
     "Frozen Raw Business": "frozen_raw_business",
-    "RTE Business": "rte_business",
+    "Ready To Eat Business": "rte_business",
     "Further Value Added Business": "shared_distribution_network",
-    "Shared Frozen + RTE Distribution Network": "shared_distribution_network",
 }
 
 
@@ -1066,7 +1065,7 @@ def render_distributor_channel_drilldown(kpi_name):
     distribution_map = {
         "Fresh Chilled Business": ("Fresh Chilled", "FRESH", "fresh_chilled_revenue", "fresh_distributors", "fresh_revenue_capacity_per_distributor", "fresh_network_capacity", "fresh_utilization_pct", "fresh_capacity_status"),
         "Frozen Raw Business": ("Frozen Raw", "FROZEN", "frozen_raw_revenue", "frozen_raw_distributors", "frozen_revenue_capacity_per_distributor", "frozen_network_capacity", "frozen_utilization_pct", "frozen_capacity_status"),
-        "RTE Business": ("Ready To Eat", "RTE", "rte_revenue", "rte_distributors", "rte_revenue_capacity_per_distributor", "rte_network_capacity", "rte_utilization_pct", "rte_capacity_status"),
+        "Ready To Eat Business": ("Ready To Eat", "RTE", "rte_revenue", "rte_distributors", "rte_revenue_capacity_per_distributor", "rte_network_capacity", "rte_utilization_pct", "rte_capacity_status"),
         "Further Value Added Business": ("Further Value Added", "FVA", "fva_revenue", "fva_distributors", "fva_revenue_capacity_per_distributor", "fva_network_capacity", "fva_utilization_pct", "fva_capacity_status"),
     }
     if kpi_name in distribution_map:
@@ -1107,20 +1106,6 @@ def render_distributor_channel_drilldown(kpi_name):
             st.write("Monitor this network closely; it is close to the practical operating limit.")
         else:
             st.write("Current partner capacity can support the planned business.")
-        return
-
-    if kpi_name == "Shared Frozen + RTE Distribution Network":
-        st.write("Consolidated shared network view")
-        st.write("This combines Frozen Raw and RTE distribution load for an operational planning view. It is not an additional revenue stream.")
-        render_display_dataframe(st, "distribution_shared_frozen_rte", pd.DataFrame([
-            {"Item": "Frozen Raw Revenue", "Value": fmt_currency(distributor_output["frozen_raw_revenue"])},
-            {"Item": "RTE Revenue", "Value": fmt_currency(distributor_output["rte_revenue"])},
-            {"Item": "Combined Revenue Served", "Value": fmt_currency(distributor_output["shared_frozen_rte_revenue_served"])},
-            {"Item": "Shared Network Capacity", "Value": fmt_currency(distributor_output["shared_network_capacity"])},
-            {"Item": "Utilization", "Value": f"{distributor_output['shared_utilization_pct']:,.1f}%"},
-            {"Item": "Capacity Gap", "Value": fmt_currency(max(0.0, distributor_output["shared_frozen_rte_revenue_served"] - distributor_output["shared_network_capacity"]))},
-            {"Item": "Note", "Value": "Consolidated view only — not additional revenue"},
-        ]), hide_index=True, width="stretch")
         return
 
     if kpi_name == "GT Sales Executives":
@@ -2551,7 +2536,7 @@ log_section_end("Market-specific Planning")
 log_section_start("Commercial & Distribution Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-title'>Commercial & Distribution Planning</div>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-subtitle'>Execution capacity and distributor network for commercial delivery.</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-subtitle'>Portfolio-wise route-to-market, distribution capacity and commercial coverage.</div>", unsafe_allow_html=True)
 product_revenue_tolerance = 0.01
 st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:6px;'>Product Revenue Reconciliation</div>", unsafe_allow_html=True)
 render_display_dataframe(st, "product_revenue_reconciliation", pd.DataFrame([
@@ -2567,7 +2552,7 @@ if abs(distributor_output["product_revenue_variance"]) > product_revenue_toleran
     st.warning(f"Product revenue allocation differs from corporate revenue target by {fmt_currency(abs(distributor_output['product_revenue_variance']))}.")
 
 st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:6px;'>A. Portfolio Distribution Network</div>", unsafe_allow_html=True)
-dcol1, dcol2, dcol3 = st.columns(3)
+dcol1, dcol2 = st.columns(2)
 with dcol1:
     distribution_business_card(
         "Fresh Chilled Business",
@@ -2588,9 +2573,10 @@ with dcol2:
         distributor_output["frozen_capacity_status"],
         "dist_frozen_raw_business",
     )
+dcol3, dcol4 = st.columns(2)
 with dcol3:
     distribution_business_card(
-        "RTE Business",
+        "Ready To Eat Business",
         distributor_output["rte_revenue"],
         distributor_output["rte_distributors"],
         distributor_output["rte_network_capacity"],
@@ -2598,7 +2584,6 @@ with dcol3:
         distributor_output["rte_capacity_status"],
         "dist_rte_business",
     )
-dcol4, dcol5 = st.columns(2)
 with dcol4:
     distribution_business_card(
         "Further Value Added Business",
@@ -2609,24 +2594,14 @@ with dcol4:
         distributor_output["fva_capacity_status"],
         "dist_fva_business",
     )
-with dcol5:
-    distribution_business_card(
-        "Shared Frozen + RTE Distribution Network",
-        distributor_output["shared_frozen_rte_revenue_served"],
-        distributor_output["shared_frozen_rte_distributors"],
-        distributor_output["shared_network_capacity"],
-        distributor_output["shared_utilization_pct"],
-        distributor_output["shared_frozen_rte_capacity_status"],
-        "dist_shared_frozen_rte_network",
-    )
-st.caption("Consolidated operational view — not additional revenue.")
 
 st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:10px;'>B. Portfolio Account & Network Capacity</div>", unsafe_allow_html=True)
+st.markdown("<div class='pbos-section-subtitle'>Channel-account coverage, distributor capacity and route-to-market execution requirements.</div>", unsafe_allow_html=True)
 exec_col1, exec_col2, exec_col3 = st.columns(3)
 with exec_col1:
     gt_execution = channel_sales_output["general_trade"]
     render_kpi_card(
-        "GT Retail Coverage",
+        "GT Distributor / Outlet Coverage",
         f"{gt_execution['required_distributors']:,.0f} distributors",
         subtitle=f"{gt_execution['target_outlets']:,.0f} target outlets | {gt_execution['outlets_per_distributor']:,.0f} outlets/distributor",
         status=gt_execution["coverage_status"],
@@ -2660,7 +2635,7 @@ with exec_col3:
 exec_col4, exec_col5, exec_col6 = st.columns(3)
 with exec_col4:
     render_kpi_card(
-        "HORECA Coverage",
+        "HoReCa Accounts",
         f"{channel_sales_output['horeca']['accounts']:,.0f}",
         subtitle="HoReCa active contracts and accounts",
         icon_key="horeca",
@@ -2670,7 +2645,7 @@ with exec_col4:
     )
 with exec_col5:
     render_kpi_card(
-        "Institutional Accounts",
+        "Institutional / Government Accounts",
         f"{channel_sales_output['institution']['accounts']:,.0f}",
         subtitle="Institutional and government tenders",
         icon_key="institutional_government",
@@ -2966,11 +2941,11 @@ with st.expander("Reverse Distributor and GT Sales Planning", expanded=False):
     else:
         st.success("Recommendation: institutional and government ownership supports tenders, rate contracts, and collections follow-up.")
 
-    distributor_choice = st.selectbox("Distributor Type", ["Frozen Raw", "RTE", "Shared Frozen + RTE Distribution Network"], key="reverse_distributor_type")
+    distributor_choice = st.selectbox("Distributor Type", ["Frozen Raw", "Ready To Eat", "Shared Frozen + Ready To Eat Distribution Network"], key="reverse_distributor_type")
     distributor_map = {
         "Frozen Raw": ("frozen_raw_revenue", "frozen_raw_distributors", "frozen_revenue_capacity_per_distributor"),
-        "RTE": ("rte_revenue", "rte_distributors", "rte_revenue_capacity_per_distributor"),
-        "Shared Frozen + RTE Distribution Network": ("shared_frozen_rte_revenue_served", "shared_frozen_rte_distributors", "shared_frozen_rte_revenue_per_distributor"),
+        "Ready To Eat": ("rte_revenue", "rte_distributors", "rte_revenue_capacity_per_distributor"),
+        "Shared Frozen + Ready To Eat Distribution Network": ("shared_frozen_rte_revenue_served", "shared_frozen_rte_distributors", "shared_frozen_rte_revenue_per_distributor"),
     }
     revenue_key, count_key, capacity_key = distributor_map[distributor_choice]
     target_distributors = st.number_input("CEO Distributor Count", min_value=int(0), value=int(distributor_output[count_key]), step=int(1), key="reverse_distributor_count")
