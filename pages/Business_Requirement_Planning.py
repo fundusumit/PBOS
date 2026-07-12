@@ -8,29 +8,73 @@ import streamlit as st
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from calculation_engine import align_manpower_sales, build_channel_sales_output, build_contract_pricing_output, build_distributor_output, build_explainability, build_financial_chain, build_logistics_output, build_order_capacity_intelligence, build_plant_planning
 
-st.set_page_config(page_title="Business Requirement Planning", layout="wide")
+st.set_page_config(page_title="PBOS — Business Planning Operating System", page_icon="📊", layout="wide")
 
 st.markdown("""
 <style>
 .pbos-page-header {
     background: linear-gradient(135deg, #0f2340 0%, #162c4d 100%);
     border-radius: 18px;
-    padding: 18px 20px;
-    margin-bottom: 16px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
     box-shadow: 0 8px 24px rgba(15, 35, 64, 0.16);
 }
 .pbos-page-title {
-    font-size: 1.7rem;
+    font-size: 1.45rem;
     font-weight: 700;
     color: #ffffff;
     margin: 0 0 4px 0;
     line-height: 1.15;
 }
 .pbos-page-subtitle {
-    font-size: 0.95rem;
+    font-size: 0.88rem;
     color: #c8d2e0;
-    margin: 0;
+    margin: 0 0 8px 0;
     line-height: 1.4;
+}
+.pbos-page-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 2px;
+}
+.pbos-meta-chip {
+    display: inline-block;
+    border: 1px solid rgba(200, 210, 224, 0.45);
+    border-radius: 999px;
+    padding: 2px 9px;
+    color: #d7e3ef;
+    font-size: 0.74rem;
+    line-height: 1.3;
+}
+.pbos-status-chip {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 2px 9px;
+    color: #0f2340;
+    background: #dbeafe;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-left: 4px;
+}
+.pbos-top-controls .stButton > button {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid #c8d2e0;
+    background: #ffffff;
+    color: #163453;
+    font-size: 0.82rem;
+    padding: 0.42rem 0.65rem;
+}
+.pbos-demo-note {
+    border: 1px solid #d9e4f0;
+    background: #f4f8fc;
+    color: #3f566e;
+    border-radius: 10px;
+    padding: 7px 10px;
+    margin-bottom: 14px;
+    font-size: 0.8rem;
 }
 .pbos-section-card {
     background: #ffffff;
@@ -55,7 +99,7 @@ st.markdown("""
     background: #ffffff;
     border: 1px solid #dbe3ee;
     border-radius: 14px;
-    padding: 16px;
+    padding: 14px;
     min-height: 120px;
     height: auto;
     box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
@@ -86,7 +130,7 @@ st.markdown("""
     white-space: normal;
 }
 .pbos-kpi-value {
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 800;
     line-height: 1.15;
     color: #0f172a;
@@ -108,6 +152,7 @@ st.markdown("""
     border-radius: 999px;
     font-size: 0.74rem;
     font-weight: 600;
+    margin-top: auto;
 }
 .pbos-status-positive {
     background: #e7f7ec;
@@ -122,8 +167,8 @@ st.markdown("""
     color: #b91c1c;
 }
 .pbos-status-neutral {
-    background: #eef2f7;
-    color: #4b5563;
+    background: #e8eef6;
+    color: #3f5267;
 }
 .pbos-info-banner {
     background: #eef6ff;
@@ -147,12 +192,40 @@ st.markdown("""
     border-color: #a6c1e4;
     background: #f6faff;
 }
+.pbos-sidebar-caption {
+    font-size: 0.79rem;
+    color: #5b6e82;
+    margin: -2px 0 8px 0;
+}
+.pbos-ceo-summary {
+    border: 1px solid #d7e1ec;
+    border-radius: 12px;
+    padding: 12px;
+    background: #fbfdff;
+}
+.pbos-ceo-row {
+    font-size: 0.88rem;
+    color: #2c4055;
+    margin-bottom: 6px;
+}
+.pbos-footer {
+    border-top: 1px solid #e4ebf4;
+    margin-top: 8px;
+    padding-top: 10px;
+    color: #5b6e82;
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+.pbos-footer a {
+    color: #2d5b88;
+    text-decoration: none;
+}
 @media (max-width: 900px) {
     .pbos-page-header {
-        padding: 15px 16px;
+        padding: 12px 14px;
     }
     .pbos-page-title {
-        font-size: 1.35rem;
+        font-size: 1.2rem;
     }
     .pbos-kpi-card {
         min-height: auto;
@@ -161,12 +234,55 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("""
-<div class="pbos-page-header">
-  <div class="pbos-page-title">PBOS Business Requirement Planning</div>
-  <div class="pbos-page-subtitle">Revenue-to-resource planning across procurement, plant, manpower, logistics, distribution, channels, EBITDA and PAT.</div>
-</div>
-""", unsafe_allow_html=True)
+def show_about_pbos():
+    if hasattr(st, "dialog"):
+        @st.dialog("About PBOS")
+        def _about_dialog():
+            st.markdown("### PBOS — Business Planning Operating System")
+            st.write("Version 1.0 MVP")
+            st.write("Created by:")
+            st.write("Sumit Kumar Mukherjee")
+            st.write("Role:")
+            st.write("Founder & Product Architect")
+            st.write("Purpose:")
+            st.write("PBOS is a scenario-based business planning platform for poultry and food manufacturing operations. It connects revenue planning with channel ownership, plant capacity, raw-material requirement, logistics, manpower and financial impact.")
+            st.write("Current status:")
+            st.write("Public planning prototype. Scenario values are planning assumptions and are not live ERP or confirmed operational data.")
+            st.write("Technology:")
+            st.markdown("- Python\n- Streamlit\n- Pandas\n- Plotly\n- GitHub\n- Streamlit Community Cloud")
+            st.write("Repository:")
+            st.write("https://github.com/fundusumit/PBOS")
+
+        _about_dialog()
+    else:
+        with st.expander("About PBOS", expanded=False):
+            st.markdown("### PBOS — Business Planning Operating System")
+            st.write("Version 1.0 MVP")
+            st.write("Created by: Sumit Kumar Mukherjee")
+            st.write("Role: Founder & Product Architect")
+
+
+hero_left, hero_right = st.columns([0.84, 0.16])
+with hero_left:
+    st.markdown("""
+    <div class="pbos-page-header">
+      <div class="pbos-page-title">PBOS — Business Planning Operating System</div>
+      <div class="pbos-page-subtitle">Scenario-based planning for revenue, channels, plant capacity, procurement, logistics, manpower and profitability.</div>
+      <div class="pbos-page-meta">
+        <span class="pbos-meta-chip">Version 1.0 MVP</span>
+        <span class="pbos-meta-chip">Created by Sumit Kumar Mukherjee</span>
+        <span class="pbos-meta-chip">Founder & Product Architect</span>
+        <span class="pbos-status-chip">Public Planning Prototype</span>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+with hero_right:
+    st.markdown("<div class='pbos-top-controls'>", unsafe_allow_html=True)
+    if st.button("About PBOS", key="about_pbos_top"):
+        show_about_pbos()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div class='pbos-demo-note'><b>Demo note:</b> This public version uses planning assumptions and scenario inputs. It does not contain confidential company data or live ERP transactions.</div>", unsafe_allow_html=True)
 
 
 def fmt_currency(value):
@@ -955,7 +1071,7 @@ def distributor_channel_kpi_card(label, value, key, subtitle=None, status=None, 
 
 
 def distribution_business_card(label, revenue, partners, network_capacity, utilization_pct, status, key):
-    render_kpi_card(label, fmt_currency(revenue), subtitle=f"Distribution Partners: {partners:,.0f} | Monthly Network Capacity: {fmt_currency(network_capacity)} | Utilization: {utilization_pct:,.1f}%", status=status, status_type="pbos-status-neutral", button_label="View details", key=key, button_action=lambda: show_distributor_channel_drilldown(label), icon_key=DISTRIBUTION_ICON_KEYS.get(label))
+    render_kpi_card(label, fmt_currency(revenue), subtitle=f"Distribution Partners: {partners:,.0f} | Monthly Network Capacity: {fmt_currency(network_capacity)} | Utilization: {utilization_pct:,.1f}% | Active distributor actual count: Not Connected", status=status, status_type="pbos-status-neutral", button_label="View details", key=key, button_action=lambda: show_distributor_channel_drilldown(label), icon_key=DISTRIBUTION_ICON_KEYS.get(label))
 
 
 def as_int(v):
@@ -1191,6 +1307,8 @@ dependency_lookup = dependency_registry if not dependency_registry.empty else pd
 logic_lookup = {str(row.get("business_area", "")).strip(): row for _, row in logic_registry.iterrows()} if not logic_registry.empty else {}
 
 with st.sidebar:
+    st.markdown("### PBOS Planning Controls")
+    st.markdown("<div class='pbos-sidebar-caption'>Adjust assumptions to test business scenarios.</div>", unsafe_allow_html=True)
     st.header("Business Planning Inputs")
     corporate_revenue_cr = st.number_input("Corporate Revenue Target (₹ Cr / month)", min_value=float(0.0), value=float(6.0), step=float(1.0))
     business_stage = st.selectbox("Business Stage", ["Startup", "Scale-up", "Regional", "Multi-state", "National"], index=0)
@@ -1212,7 +1330,7 @@ with st.sidebar:
         default_mix = as_float(row.get("default_mix_percent", 0.0))
         channel_mix[channel_id] = st.slider(f"{channel_name} %", 0, 100, int(default_mix), key=f"channel_{channel_id}")
 
-    with st.sidebar.expander("Advanced Procurement Assumptions", expanded=False):
+    with st.sidebar.expander("Procurement Drivers", expanded=False):
         st.subheader("Procurement Drivers")
         live_bird_rate = st.number_input("Live Bird Rate (₹/kg)", min_value=float(0.0), max_value=float(500.0), value=get_assumption(assumptions, ["LIVE_BIRD_RATE"], as_float(180.0)), step=float(5.0))
         yield_pct = st.number_input("Yield %", min_value=float(0.0), max_value=float(100.0), value=get_assumption(assumptions, ["YIELD_PCT"], as_float(72.0)), step=float(1.0))
@@ -1223,7 +1341,7 @@ with st.sidebar:
         packaging_cost = st.number_input("Packaging Cost (₹/kg)", min_value=float(0.0), max_value=float(250.0), value=get_assumption(assumptions, ["PACKAGING_COST_PER_KG"], as_float(18.0)), step=float(1.0))
         transport_cost = st.number_input("Transport Cost (₹/kg)", min_value=float(0.0), max_value=float(250.0), value=get_assumption(assumptions, ["TRANSPORT_COST_PER_KG"], as_float(12.0)), step=float(1.0))
 
-    with st.sidebar.expander("Advanced Plant Assumptions", expanded=False):
+    with st.sidebar.expander("Plant & Manufacturing Assumptions", expanded=False):
         st.subheader("Operational Assumptions")
         asp_per_kg = st.number_input("Average Selling Price / kg", min_value=float(0.0), max_value=float(1000.0), value=get_assumption(assumptions, ["ASP_KG"], as_float(240.0)), step=float(10.0))
         avg_bird_weight = st.number_input("Average Bird Weight (kg)", min_value=float(0.1), max_value=float(5.0), value=get_assumption(assumptions, ["AVG_BIRD_WEIGHT"], as_float(1.8)), step=float(0.1))
@@ -1238,7 +1356,7 @@ with st.sidebar:
         cold_storage_buffer_days = st.number_input("Cold Storage Buffer Days", min_value=float(0.0), max_value=float(30.0), value=get_assumption(assumptions, ["COLD_STORAGE_BUFFER_DAYS"], as_float(3.0)), step=float(0.5))
         utilization_threshold_pct = st.number_input("Utilization Threshold %", min_value=float(1.0), max_value=float(100.0), value=get_assumption(assumptions, ["UTILIZATION_THRESHOLD_PCT"], as_float(85.0)), step=float(1.0))
 
-    with st.sidebar.expander("Advanced Logistics Assumptions", expanded=False):
+    with st.sidebar.expander("Logistics Assumptions", expanded=False):
         st.subheader("Logistics Assumptions")
         primary_vehicle_capacity_kg = st.number_input("Primary Vehicle Capacity (kg)", min_value=float(1.0), max_value=float(50000.0), value=float(4000.0), step=float(500.0))
         primary_trips_per_vehicle_per_day = st.number_input("Primary Trips per Vehicle per Day", min_value=int(1), max_value=int(10), value=int(2), step=int(1))
@@ -1807,7 +1925,7 @@ st.markdown("<div class='pbos-section-title'>Corporate Summary</div>", unsafe_al
 st.markdown("<div class='pbos-section-subtitle'>Executive snapshot of revenue, demand, capacity and staffing.</div>", unsafe_allow_html=True)
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    render_kpi_card("Corporate Revenue", fmt_currency(corporate_plant_revenue), subtitle="Monthly Revenue", icon_key="corporate_revenue")
+    render_kpi_card("Corporate Revenue", fmt_currency(corporate_plant_revenue), subtitle="Planned | Monthly Revenue", icon_key="corporate_revenue")
 with col2:
     render_kpi_card("Corporate Birds / Day", fmt_birds(corporate_birds_day, "day"), subtitle="Across All Active Markets", icon_key="corporate_birds_day")
 with col3:
@@ -1894,7 +2012,7 @@ with own_col7:
     render_kpi_card(
         "HoReCa",
         fmt_currency(channel_sales_output["horeca"].get("planned_revenue", channel_sales_output["horeca"]["revenue"])),
-        subtitle=f"Rate/kg: ₹{channel_sales_output['horeca']['contract_rate_per_kg']:,.0f} | Required volume: {channel_sales_output['horeca']['required_volume_kg_month']:,.0f} kg | HC: {channel_sales_output['horeca_sales_hc']:,.0f}",
+        subtitle=f"Calculated rate/kg: ₹{channel_sales_output['horeca']['contract_rate_per_kg']:,.0f} | Required volume: {channel_sales_output['horeca']['required_volume_kg_month']:,.0f} kg | HC: {channel_sales_output['horeca_sales_hc']:,.0f}",
         icon_key="horeca",
         button_label="View details",
         key="channel_horeca_sales",
@@ -1904,7 +2022,7 @@ with own_col8:
     render_kpi_card(
         "Institutional / Government",
         fmt_currency(channel_sales_output["institution"].get("planned_revenue", channel_sales_output["institution"]["revenue"])),
-        subtitle=f"Rate/kg: ₹{channel_sales_output['institution']['contract_rate_per_kg']:,.0f} | Volume: {channel_sales_output['institution']['required_volume_kg_month']:,.0f} kg | Packs: {channel_sales_output['institution']['institutional_required_packs_month']:,.0f} | HC: {channel_sales_output['institution_government_manager']:,.0f}",
+        subtitle=f"Calculated rate/kg: ₹{channel_sales_output['institution']['contract_rate_per_kg']:,.0f} | Volume: {channel_sales_output['institution']['required_volume_kg_month']:,.0f} kg | Packs: {channel_sales_output['institution']['institutional_required_packs_month']:,.0f} | HC: {channel_sales_output['institution_government_manager']:,.0f}",
         icon_key="institutional_government",
         button_label="View details",
         key="channel_inst_gov",
@@ -2082,7 +2200,7 @@ st.markdown("<div class='pbos-section-title'>Raw Material & Procurement Planning
 st.markdown("<div class='pbos-section-subtitle'>Live bird procurement and raw material conversion for the selected market.</div>", unsafe_allow_html=True)
 proc_col1, proc_col2, proc_col3, proc_col4 = st.columns(4)
 with proc_col1:
-    render_kpi_card("Live Bird Rate", fmt_rate_per_kg(live_bird_rate), subtitle="Live sidebar driver", icon_key="live_bird_rate")
+    render_kpi_card("Live Bird Rate", fmt_rate_per_kg(live_bird_rate), subtitle="Assumption | Registry default can be overridden", icon_key="live_bird_rate")
 with proc_col2:
     render_kpi_card("Yield", f"{yield_pct:,.1f}%", subtitle="Conversion efficiency", icon_key="yield")
 with proc_col3:
@@ -2135,7 +2253,7 @@ st.markdown("<div class='pbos-section-title'>Order & Capacity Intelligence</div>
 st.markdown("<div class='pbos-section-subtitle'>Actual order demand compared with planned volume, inventory and plant capacity.</div>", unsafe_allow_html=True)
 order_col1, order_col2, order_col3, order_col4 = st.columns(4)
 with order_col1:
-    render_kpi_card("Scenario Mode", order_capacity_intelligence.get("scenario_mode", "No Scenario"), subtitle="Order scenario", icon_key="scenario_mode")
+    render_kpi_card("Scenario Mode", order_capacity_intelligence.get("scenario_mode", "No Scenario"), subtitle="Scenario", icon_key="scenario_mode")
 with order_col2:
     render_kpi_card("Order Source", order_capacity_intelligence.get("order_source", "NONE"), subtitle="Planning source", icon_key="order_source")
 with order_col3:
@@ -2146,7 +2264,7 @@ order_col5, order_col6, order_col7, order_col8 = st.columns(4)
 with order_col5:
     render_kpi_card("Overall Achievement %", f"{order_capacity_intelligence['overall_achievement_pct']:,.1f}%", subtitle="Scenario vs plan", icon_key="achievement")
 with order_col6:
-    render_kpi_card("Available Cold Inventory", f"{order_capacity_intelligence['available_inventory_mt']:,.1f} MT", subtitle="One-time releasable stock", icon_key="available_inventory")
+    render_kpi_card("Available Cold Inventory", f"{order_capacity_intelligence['available_inventory_mt']:,.1f} MT", subtitle="Scenario input | Actual feed: Not Connected", icon_key="available_inventory")
 with order_col7:
     render_kpi_card("Available Plant Capacity", f"{order_capacity_intelligence['available_plant_capacity_mt_day']:,.1f} MT/day", subtitle="Production capacity", icon_key="available_plant_capacity")
 with order_col8:
@@ -2339,12 +2457,33 @@ st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-title'>CEO Recommendation</div>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-subtitle'>Concise executive view for the current operating plan.</div>", unsafe_allow_html=True)
 horeca_pricing = channel_sales_output.get("horeca", {})
-st.write(f"The selected plant {selected_plant_name} is supporting {selected_market_name} with a plant utilization of {plant_capacity_output['plant_utilization_pct']:,.1f}%.")
-st.write(f"Revenue opportunity is {fmt_currency(revenue_rupees)} with procurement spend at {fmt_currency(procurement_spend)} and gross contribution of {fmt_currency(gross_contribution)}.")
-st.write(f"At a live-bird rate of ₹{horeca_pricing.get('live_bird_rate', live_bird_rate):,.0f}/kg, the estimated total operating cost is ₹{horeca_pricing.get('total_cost_per_kg', 0.0):,.0f}/kg. PBOS recommends a HoReCa and Institutional contract rate of approximately ₹{horeca_pricing.get('recommended_selling_price_per_kg', 0.0):,.0f}/kg to protect a {horeca_pricing.get('target_margin_pct', 15.0):,.0f}% gross margin.")
-st.write(f"Achieved margin is {horeca_pricing.get('actual_margin_pct', 0.0):,.1f}% and pricing status is {horeca_pricing.get('pricing_status', 'N/A')}. Live-bird price movement directly changes raw material cost, recommended contract price, channel revenue allocation, and contribution.")
-st.write(f"The current recommendation remains to monitor utilization, preserve cold-chain readiness, and keep staffing aligned with the revenue plan.")
+key_constraint = "Plant utilization requires expansion review." if plant_capacity_output['plant_utilization_pct'] > 85 else "Capacity is within the current operating range."
+st.markdown(
+        f"""
+        <div class='pbos-ceo-summary'>
+            <div class='pbos-ceo-row'><b>Current Plan:</b> {selected_plant_name} is serving {selected_market_name} with planned revenue of {fmt_currency(revenue_rupees)}.</div>
+            <div class='pbos-ceo-row'><b>Key Constraint:</b> {key_constraint} Current utilization is {plant_capacity_output['plant_utilization_pct']:,.1f}%.</div>
+            <div class='pbos-ceo-row'><b>Financial Signal:</b> Procurement spend {fmt_currency(procurement_spend)}, gross contribution {fmt_currency(gross_contribution)}, EBITDA {fmt_currency(ebitda)}, PAT {fmt_currency(pat)}.</div>
+            <div class='pbos-ceo-row'><b>Recommended Management Action:</b> Maintain staffing and cold-chain readiness, and monitor live-bird rate sensitivity. Current calculated pricing status is {horeca_pricing.get('pricing_status', 'Not Available')} at an achieved margin of {horeca_pricing.get('actual_margin_pct', 0.0):,.1f}%.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+)
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.caption(f"Current stage: {business_stage}. {stage['automation_note']}")
+st.markdown(
+        """
+        <div class='pbos-footer'>
+            <div><b>PBOS — Business Planning Operating System</b></div>
+            <div>Version 1.0 MVP</div>
+            <div>Created by Sumit Kumar Mukherjee</div>
+            <div>Founder & Product Architect</div>
+            <div>© 2026 Sumit Kumar Mukherjee</div>
+            <div>Live Demo: <a href='https://pbos-business-planning.streamlit.app' target='_blank'>https://pbos-business-planning.streamlit.app</a></div>
+            <div>GitHub: <a href='https://github.com/fundusumit/PBOS' target='_blank'>https://github.com/fundusumit/PBOS</a></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+)
 

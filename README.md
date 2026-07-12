@@ -2,6 +2,24 @@
 
 PBOS Business Requirement Planning is a current working Streamlit planning prototype for poultry business planning.
 
+## Live Demo
+
+https://pbos-business-planning.streamlit.app
+
+## Creator
+
+Sumit Kumar Mukherjee
+Founder & Product Architect
+
+## Public Demo Status
+
+Current working planning prototype.
+Scenario values are planning assumptions and are not live ERP data.
+
+## Portfolio Summary
+
+PBOS is a scenario-based business planning platform built in Python and Streamlit. It connects revenue targets with channel allocation, plant capacity, procurement, logistics, manpower and profitability, while allowing users to test planning scenarios through interactive controls.
+
 The application currently covers:
 
 - corporate revenue planning

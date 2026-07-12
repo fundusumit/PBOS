@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-st.set_page_config(page_title="PBOS Business Plan", page_icon="📊", layout="wide")
+st.set_page_config(page_title="PBOS — Business Planning Operating System", page_icon="📊", layout="wide")
 
 BASE = Path(__file__).parent
 
@@ -112,8 +112,13 @@ st.markdown("""
 .main {background:#f7f9fc;}
 .block-container {padding-top:1.2rem;}
 .hero {background:#0B1F33;color:white;padding:20px 26px;border-radius:14px;margin-bottom:18px;}
-.hero h1 {margin:0;font-size:30px;}
-.hero p {margin:4px 0 0 0;color:#c9d6e4;}
+.hero h1 {margin:0;font-size:26px;line-height:1.2;}
+.hero p {margin:4px 0 0 0;color:#c9d6e4;font-size:0.92rem;}
+.hero-meta {display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+.hero-chip {display:inline-block;border:1px solid rgba(201,214,228,.45);border-radius:999px;padding:2px 8px;font-size:11px;color:#d6e3ef;}
+.hero-badge {display:inline-block;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700;background:#dbeafe;color:#0f2340;}
+.demo-note {border:1px solid #d9e4f0;background:#f4f8fc;color:#3f566e;border-radius:10px;padding:7px 10px;margin-bottom:14px;font-size:0.8rem;}
+.top-controls .stButton > button {width:100%;border-radius:10px;border:1px solid #c8d2e0;background:#ffffff;color:#163453;font-size:0.82rem;padding:0.4rem 0.65rem;}
 .card {background:white;border:1px solid #e5e7eb;border-radius:14px;padding:14px 16px;box-shadow:0 2px 8px rgba(15,23,42,.06);min-height:190px;height:190px;display:flex;flex-direction:column;justify-content:flex-start;gap:4px;overflow:hidden;}
 .card-title {font-size:13px;color:#64748b;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700;}
 .card-value {font-size:25px;font-weight:800;color:#0f172a;line-height:1.15;white-space:nowrap;}
@@ -124,12 +129,49 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("""
-<div class="hero">
-  <h1>PBOS Business Planning Operating System</h1>
-  <p>Enterprise Scenario Intelligence Platform powered by Dashboard Data + Strategy Drivers</p>
-</div>
-""", unsafe_allow_html=True)
+def show_about_pbos():
+        if hasattr(st, "dialog"):
+                @st.dialog("About PBOS")
+                def _about_dialog():
+                        st.markdown("### PBOS — Business Planning Operating System")
+                        st.write("Version 1.0 MVP")
+                        st.write("Created by:")
+                        st.write("Sumit Kumar Mukherjee")
+                        st.write("Role:")
+                        st.write("Founder & Product Architect")
+                        st.write("Purpose:")
+                        st.write("PBOS is a scenario-based business planning platform for poultry and food manufacturing operations. It connects revenue planning with channel ownership, plant capacity, raw-material requirement, logistics, manpower and financial impact.")
+                        st.write("Current status:")
+                        st.write("Public planning prototype. Scenario values are planning assumptions and are not live ERP or confirmed operational data.")
+                        st.write("Technology:")
+                        st.markdown("- Python\n- Streamlit\n- Pandas\n- Plotly\n- GitHub\n- Streamlit Community Cloud")
+                        st.write("Repository:")
+                        st.write("https://github.com/fundusumit/PBOS")
+
+                _about_dialog()
+
+
+hero_left, hero_right = st.columns([0.84, 0.16])
+with hero_left:
+        st.markdown("""
+        <div class="hero">
+            <h1>PBOS — Business Planning Operating System</h1>
+            <p>Scenario-based planning for revenue, channels, plant capacity, procurement, logistics, manpower and profitability.</p>
+            <div class="hero-meta">
+                <span class="hero-chip">Version 1.0 MVP</span>
+                <span class="hero-chip">Created by Sumit Kumar Mukherjee</span>
+                <span class="hero-chip">Founder & Product Architect</span>
+                <span class="hero-badge">Public Planning Prototype</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+with hero_right:
+        st.markdown("<div class='top-controls'>", unsafe_allow_html=True)
+        if st.button("About PBOS", key="about_pbos_app"):
+                show_about_pbos()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div class='demo-note'><b>Demo note:</b> This public version uses planning assumptions and scenario inputs. It does not contain confidential company data or live ERP transactions.</div>", unsafe_allow_html=True)
 
 with st.sidebar:
     st.header("Scenario Drivers")
