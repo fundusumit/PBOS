@@ -1677,7 +1677,7 @@ with st.sidebar:
 
         st.subheader("HoReCa Contract Revenue")
         horeca_revenue_mode = st.selectbox("HoReCa Revenue Mode", ["CONTRACT", "MIX_ALLOCATION"], index=0)
-        dynamic_contract_pricing = build_contract_pricing_output(live_bird_rate, procurement_drivers=procurement_drivers, operating_model=operating_model)
+        dynamic_contract_pricing = build_contract_pricing_output(live_bird_rate=live_bird_rate, procurement_drivers=procurement_drivers, operating_model=operating_model)
         recommended_contract_rate_per_kg = float(dynamic_contract_pricing["contract_rate_per_kg"])
         horeca_contract_rate_per_kg = st.number_input("HoReCa Contract Rate (₹/kg)", min_value=float(0.01), max_value=float(1000.0), value=recommended_contract_rate_per_kg, step=float(1.0), disabled=True)
         horeca_contract_volume_kg_month = st.number_input("HoReCa Contract Volume (kg/month)", min_value=float(0.0), max_value=float(1_000_000.0), value=float(5_000.0), step=float(500.0))

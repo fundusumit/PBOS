@@ -1004,6 +1004,7 @@ def build_contract_pricing_output(
     trader_margin_pct=None,
     farm_margin_pct=None,
 ):
+    procurement_drivers = procurement_drivers if isinstance(procurement_drivers, dict) else {}
     inferred_yield_pct = max(0.01, _to_float(dressed_output_kg, 1.3) / max(0.1, _to_float(average_live_bird_weight_kg, 1.8))) * 100.0
     waterfall = build_procurement_cost_waterfall(
         live_bird_rate_per_kg=_procurement_driver_value(procurement_drivers, "live_bird_rate_per_kg", live_bird_rate),
@@ -1109,7 +1110,7 @@ def build_channel_sales_output(market_revenue=0.0, channel_mix=None, working_day
     }
     total_share = sum(shares.values()) or 1.0
     shares = {k: v / total_share for k, v in shares.items()}
-    pricing = build_contract_pricing_output(live_bird_rate, procurement_drivers=procurement_drivers, operating_model=operating_model)
+    pricing = build_contract_pricing_output(live_bird_rate=live_bird_rate, procurement_drivers=procurement_drivers, operating_model=operating_model)
     horeca_rate = _to_float(horeca_contract_rate_per_kg, pricing["recommended_selling_price_per_kg"])
     inst_rate = _to_float(institutional_contract_rate_per_kg, pricing["recommended_selling_price_per_kg"])
     horeca_mix_revenue = revenue * shares["horeca"]
