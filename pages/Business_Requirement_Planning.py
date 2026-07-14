@@ -1,6 +1,7 @@
 import math
 import os
 import sys
+import html
 from datetime import date
 from html import escape
 import pandas as pd
@@ -704,16 +705,16 @@ def render_section_header(title: str, subtitle: str | None = None, section_code:
     if section_code:
         title_text = f"{section_code}. {title_text}"
 
-    subtitle_html = f"<div class='pbos-section-subtitle'>{escape(str(subtitle))}</div>" if subtitle else ""
+    subtitle_html = f"<div class=\"pbos-section-subtitle\">{html.escape(str(subtitle))}</div>" if subtitle else ""
     st.markdown(
         f"""
-        <div class='pbos-section-header'>
-            <div class='pbos-section-accent'></div>
-            <div class='pbos-section-copy'>
-                <div class='pbos-section-title'>{escape(title_text)}</div>
-                {subtitle_html}
-            </div>
-        </div>
+<div class="pbos-section-header">
+  <div class="pbos-section-accent"></div>
+  <div class="pbos-section-copy">
+    <div class="pbos-section-title">{html.escape(title_text)}</div>
+    {subtitle_html}
+  </div>
+</div>
         """,
         unsafe_allow_html=True,
     )
@@ -1157,18 +1158,18 @@ def render_mobile_key_value_panel(title, rows, summary_lines=None, css_class="pb
             + "</div>"
         )
 
-    st.markdown(
-        f"""
-                <div class='{escape(wrapper_class)}'>
-          <div class='{escape(css_class)}'>
-            <div class='pbos-mobile-title'>{escape(str(title))}</div>
-            {row_html}
-          </div>
-          {summary_html}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        st.markdown(
+                f"""
+<div class='{escape(wrapper_class)}'>
+    <div class='{escape(css_class)}'>
+        <div class='pbos-mobile-title'>{escape(str(title))}</div>
+        {row_html}
+    </div>
+    {summary_html}
+</div>
+                """,
+                unsafe_allow_html=True,
+        )
 
 
 def render_responsive_detail_table(table_key, title, detail_df, summary_lines=None):
