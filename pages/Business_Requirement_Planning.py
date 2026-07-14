@@ -347,67 +347,47 @@ st.markdown("""
 .pbos-capacity-dialog-content {
     padding-bottom: 5rem;
 }
-.pbos-capacity-detail-desktop {
-    display: block;
+.pbos-capacity-panel {
+    border: 1px solid #e6ebf2;
+    border-radius: 12px;
+    background: #ffffff;
+    margin-bottom: 10px;
+    overflow: hidden;
 }
-.pbos-capacity-detail-mobile {
-    display: none;
+.pbos-capacity-panel-title {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.3;
+    color: #1e293b;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border-bottom: 1px solid #eef2f7;
 }
-.pbos-capacity-detail-table {
+.pbos-capacity-summary-table {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
-    font-size: 0.82rem;
-    border: 1px solid #e6ebf2;
-    border-radius: 12px;
-    overflow: hidden;
+    font-size: 15px;
 }
-.pbos-capacity-detail-table th,
-.pbos-capacity-detail-table td {
+.pbos-capacity-summary-table td {
     border-bottom: 1px solid #eef2f7;
-    padding: 8px 10px;
+    padding: 10px 12px;
     text-align: left;
     vertical-align: top;
     white-space: normal;
     word-break: break-word;
     overflow-wrap: anywhere;
+    line-height: 1.35;
 }
-.pbos-capacity-detail-table th {
-    background: #f8fafc;
-    color: #334155;
-    font-weight: 700;
-}
-.pbos-capacity-detail-table tbody tr:last-child td {
+.pbos-capacity-summary-table tbody tr:last-child td {
     border-bottom: none;
 }
-.pbos-capacity-detail-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
-    width: 100%;
-}
-.pbos-capacity-detail-item {
-    min-width: 0;
-    padding: 0.9rem;
-    border: 1px solid rgba(128, 128, 128, 0.25);
-    border-radius: 0.75rem;
-    box-sizing: border-box;
-    background: #ffffff;
-}
-.pbos-capacity-detail-label {
-    font-size: 0.78rem;
+.pbos-capacity-summary-metric {
+    width: 60%;
     font-weight: 700;
-    opacity: 0.72;
-    overflow-wrap: anywhere;
 }
-.pbos-capacity-detail-value {
-    margin-top: 0.35rem;
-    font-size: 1.05rem;
-    font-weight: 700;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    word-break: break-word;
-    line-height: 1.35;
+.pbos-capacity-summary-value {
+    width: 40%;
 }
 .pbos-capacity-formula-card {
     border: 1px solid #dbe3ee;
@@ -555,18 +535,18 @@ st.markdown("""
         font-size: 0.74rem;
         min-width: 900px;
     }
-    .pbos-capacity-detail-desktop {
-        display: none;
+    .pbos-capacity-panel {
+        margin-bottom: 8px;
     }
-    .pbos-capacity-detail-mobile {
-        display: block;
-        width: 100%;
+    .pbos-capacity-panel-title {
+        font-size: 18px;
+        padding: 8px 10px;
     }
-    .pbos-capacity-detail-grid {
-        grid-template-columns: 1fr;
+    .pbos-capacity-summary-table {
+        font-size: 15px;
     }
-    .pbos-capacity-detail-item {
-        width: 100%;
+    .pbos-capacity-summary-table td {
+        padding: 8px 10px;
     }
 }
 @media (max-width: 600px) {
@@ -968,33 +948,27 @@ def utilization_status(utilization_pct):
     return "Expansion Planning"
 
 
-def render_capacity_detail_section(section_key, rows):
-    header_html = "<tr><th>Metric</th><th>Value</th></tr>"
+def render_capacity_detail_section(section_key, section_title, rows):
     table_row_html = "".join(
-        f"<tr><td>{escape(str(row.get('Metric', '')))}</td><td>{escape(str(row.get('Value', '')))}</td></tr>"
-        for row in rows
-    )
-    card_html = "".join(
         (
-            "<div class='pbos-capacity-detail-item'>"
-            f"<div class='pbos-capacity-detail-label'>{escape(str(row.get('Metric', '')))}</div>"
-            f"<div class='pbos-capacity-detail-value'>{escape(str(row.get('Value', '')))}</div>"
-            "</div>"
+            "<tr>"
+            f"<td class='pbos-capacity-summary-metric'>{escape(str(row.get('Metric', '')))}</td>"
+            f"<td class='pbos-capacity-summary-value'>{escape(str(row.get('Value', '')))}</td>"
+            "</tr>"
         )
         for row in rows
     )
     st.markdown(
         f"""
-        <div class='pbos-capacity-detail-desktop'>
-          <table class='pbos-capacity-detail-table' id='pbos-capacity-table-{escape(section_key)}'>
-            <thead>{header_html}</thead>
+        <div class='pbos-capacity-panel' id='pbos-capacity-panel-{escape(section_key)}'>
+          <div class='pbos-capacity-panel-title'>{escape(str(section_title))}</div>
+          <table class='pbos-capacity-summary-table'>
+            <colgroup>
+              <col style='width:60%;'>
+              <col style='width:40%;'>
+            </colgroup>
             <tbody>{table_row_html}</tbody>
           </table>
-        </div>
-        <div class='pbos-capacity-detail-mobile'>
-          <div class='pbos-capacity-detail-grid' id='pbos-capacity-cards-{escape(section_key)}'>
-            {card_html}
-          </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1122,146 +1096,45 @@ def render_plant_capacity_governance_dialog():
         )
         st.warning("Configuration Review Required")
 
-    st.markdown("**A. Current State**")
-    requirement_rows = [
-        {"Metric": "Current Installed Lines", "Value": f"{installed_lines:,.0f}"},
-        {"Metric": "Current Active Shifts", "Value": f"{active_shifts:,.0f}"},
+    current_plant_rows = [
+        {"Metric": "Installed Lines", "Value": f"{installed_lines:,.0f}"},
+        {"Metric": "Active Shifts", "Value": f"{active_shifts:,.0f}"},
         {"Metric": "Current Configuration", "Value": current_configuration_label},
-        {"Metric": "Required Output", "Value": f"{required_output:,.1f} MT/day"},
         {"Metric": "Current Installed Capacity", "Value": f"{installed_capacity:,.1f} MT/day"},
-        {"Metric": "Current Installed Capacity Shortfall", "Value": f"{capacity_shortfall:,.1f} MT/day" if capacity_shortfall > 0 else "0.0 MT/day"},
-        {"Metric": "Current Capacity Headroom", "Value": f"{capacity_headroom:,.1f} MT/day" if capacity_headroom > 0 else "0.0 MT/day"},
-        {"Metric": "Current Load Ratio", "Value": f"{current_load_ratio:,.1f}%"},
     ]
-    render_capacity_detail_section("current_state", requirement_rows)
+    render_capacity_detail_section("current_plant", "A. Current Plant", current_plant_rows)
 
-    st.markdown("**B. Current-Site Potential**")
-    config_rows = [
-        {"Metric": "Base Capacity per Line per Shift", "Value": f"{base_capacity:,.1f} MT/day"},
-        {"Metric": "Maximum Lines in Current Plant", "Value": f"{max_lines:,.0f}"},
-        {"Metric": "Maximum Shifts per Line", "Value": f"{max_shifts:,.0f}"},
-        {"Metric": "Maximum-Site Configuration", "Value": maximum_site_configuration_label},
-        {"Metric": "Maximum Current-Site Capacity", "Value": f"{max_site_capacity:,.1f} MT/day"},
-        {"Metric": "Current-Site Capacity Deficit", "Value": f"{additional_capacity_required:,.1f} MT/day" if additional_capacity_required > 0 else "0.0 MT/day"},
-        {"Metric": "Current-Site Capacity Headroom", "Value": f"{site_headroom_after_demand:,.1f} MT/day" if site_headroom_after_demand > 0 else "0.0 MT/day"},
+    demand_rows = [
+        {"Metric": "Required Output", "Value": f"{required_output:,.1f} MT/day"},
+        {"Metric": "Capacity Shortfall", "Value": f"{capacity_shortfall:,.1f} MT/day" if capacity_shortfall > 0 else "0.0 MT/day"},
+        {"Metric": "Current Utilization", "Value": f"{current_load_ratio:,.1f}%"},
     ]
-    render_capacity_detail_section("current_site_potential", config_rows)
+    render_capacity_detail_section("demand", "B. Demand", demand_rows)
 
-    st.markdown("**C. Recommendation Mode**")
-    st.write("Current-Site Optimization" if capacity_recommendation_mode == "CURRENT_SITE_OPTIMIZATION" else "New-Plant Expansion" if capacity_recommendation_mode == "NEW_PLANT_EXPANSION" else "Configuration Review Required")
+    potential_rows = [
+        {"Metric": "Maximum Lines", "Value": f"{max_lines:,.0f}"},
+        {"Metric": "Maximum Shifts", "Value": f"{max_shifts:,.0f}"},
+        {"Metric": "Maximum Configuration", "Value": maximum_site_configuration_label},
+        {"Metric": "Maximum Current Site Capacity", "Value": f"{max_site_capacity:,.1f} MT/day"},
+        {"Metric": "Remaining Headroom", "Value": f"{site_headroom_after_demand:,.1f} MT/day" if site_headroom_after_demand > 0 else "0.0 MT/day"},
+    ]
+    render_capacity_detail_section("current_site_potential", "C. Current Site Potential", potential_rows)
 
-    st.markdown("**D. Recommendation**")
     if capacity_recommendation_mode == "CURRENT_SITE_OPTIMIZATION":
         recommendation_rows = [
             {"Metric": "Recommended Configuration", "Value": recommended_configuration_label if recommended_configuration_label else "Configuration Review Required"},
             {"Metric": "Recommended Capacity", "Value": f"{recommended_capacity:,.1f} MT/day"},
-            {"Metric": "Recommended Action", "Value": recommended_action},
-            {"Metric": "Projected Utilization", "Value": f"{projected_utilization:,.1f}%"},
+            {"Metric": "Recommended Capacity Action", "Value": recommended_action},
             {"Metric": "New Plant Required", "Value": "No"},
         ]
     else:
         recommendation_rows = [
-            {"Metric": "Maximum Current-Site Configuration", "Value": maximum_site_configuration_label},
-            {"Metric": "Maximum Current-Site Capacity", "Value": f"{max_site_capacity:,.1f} MT/day"},
-            {"Metric": "Additional Capacity Required", "Value": f"{additional_capacity_required:,.1f} MT/day"},
-            {"Metric": "Recommended New-Plant Capacity", "Value": f"{recommended_new_plant_capacity:,.1f} MT/day"},
-            {"Metric": "Total Future Capacity", "Value": f"{total_future_capacity:,.1f} MT/day"},
-            {"Metric": "Projected Future Utilization", "Value": f"{projected_future_utilization:,.1f}%"},
+            {"Metric": "Recommended Configuration", "Value": maximum_site_configuration_label},
+            {"Metric": "Recommended Capacity", "Value": f"{recommended_new_plant_capacity:,.1f} MT/day"},
+            {"Metric": "Recommended Capacity Action", "Value": recommended_action},
+            {"Metric": "New Plant Required", "Value": "Yes"},
         ]
-    render_capacity_detail_section("recommendation", recommendation_rows)
-
-    st.markdown("**Recommended Action**")
-    st.write(recommended_action)
-    if supporting_actions:
-        st.write("Supporting step(s): " + ", ".join([str(x) for x in supporting_actions]))
-    if decision_reason:
-        st.write(decision_reason)
-
-    st.markdown("**E. New Plant Decision**")
-    st.write(f"New Plant Required: {'Yes' if new_plant_required == 'Yes' else 'No'}")
-    st.write(f"Reason: {decision_reason if decision_reason else _recommended_action_subtitle(plant_capacity_output)}")
-    if new_plant_required == "Yes":
-        st.write(f"Additional Capacity Required: {additional_capacity_required:,.1f} MT/day")
-        st.write(f"Recommended New Plant Capacity: {recommended_new_plant_capacity:,.1f} MT/day")
-
-    st.markdown("**Expansion Headroom Reference**")
-    headroom_rows = [
-        {"Metric": "Remaining Shift Capacity", "Value": f"{remaining_shift_capacity:,.1f} MT/day"},
-        {"Metric": "Remaining Line Capacity", "Value": f"{remaining_line_capacity:,.1f} MT/day"},
-        {"Metric": "Remaining Current-Site Capacity", "Value": f"{remaining_site_capacity:,.1f} MT/day"},
-        {"Metric": "Maximum Site Headroom After Meeting Demand", "Value": f"{site_headroom_after_demand:,.1f} MT/day"},
-        {"Metric": "Site Expandable", "Value": site_expandable},
-        {"Metric": "Cold Storage Required", "Value": f"{cold_storage_required:,.1f} MT"},
-    ]
-    render_capacity_detail_section("expansion_reference", headroom_rows)
-
-    st.markdown("**Formula Section**")
-    render_capacity_formula_block(
-        "Current Installed Capacity",
-        [
-            "= Base Capacity per Line per Shift × Installed Lines × Active Shifts",
-            f"= {base_capacity:,.1f} × {installed_lines:,.0f} × {active_shifts:,.0f}",
-            f"= {installed_capacity:,.1f} MT/day",
-        ],
-    )
-    render_capacity_formula_block(
-        "Current Installed Capacity Shortfall",
-        [
-            "= Required Output − Current Installed Capacity",
-            f"= {required_output:,.1f} − {installed_capacity:,.1f}",
-            f"= {capacity_shortfall:,.1f} MT/day",
-        ],
-    )
-    render_capacity_formula_block(
-        "Maximum Current-Site Capacity",
-        [
-            "= Base Capacity per Line per Shift × Maximum Lines × Maximum Shifts per Line",
-            f"= {base_capacity:,.1f} × {max_lines:,.0f} × {max_shifts:,.0f}",
-            f"= {max_site_capacity:,.1f} MT/day",
-        ],
-    )
-    render_capacity_formula_block(
-        "Current-Site Capacity Deficit",
-        [
-            "= Required Output − Maximum Current-Site Capacity",
-            f"= {required_output:,.1f} − {max_site_capacity:,.1f}",
-            f"= {additional_capacity_required:,.1f} MT/day",
-        ],
-    )
-    if capacity_recommendation_mode == "CURRENT_SITE_OPTIMIZATION":
-        render_capacity_formula_block(
-            "Recommended Capacity",
-            [
-                "= Base Capacity per Line per Shift × Recommended Lines × Recommended Shifts",
-                f"= {base_capacity:,.1f} × {recommended_lines:,.0f} × {recommended_shifts:,.0f}",
-                f"= {recommended_capacity:,.1f} MT/day",
-            ],
-        )
-        render_capacity_formula_block(
-            "Projected Utilization",
-            [
-                "= Required Output ÷ Recommended Capacity × 100",
-                f"= {required_output:,.1f} ÷ {recommended_capacity:,.1f} × 100",
-                f"= {projected_utilization:,.1f}%",
-            ],
-        )
-    else:
-        render_capacity_formula_block(
-            "Total Future Capacity",
-            [
-                "= Maximum Current-Site Capacity + Recommended New-Plant Capacity",
-                f"= {max_site_capacity:,.1f} + {recommended_new_plant_capacity:,.1f}",
-                f"= {total_future_capacity:,.1f} MT/day",
-            ],
-        )
-        render_capacity_formula_block(
-            "Projected Future Utilization",
-            [
-                "= Required Output ÷ Total Future Capacity × 100",
-                f"= {required_output:,.1f} ÷ {total_future_capacity:,.1f} × 100",
-                f"= {projected_future_utilization:,.1f}%",
-            ],
-        )
+    render_capacity_detail_section("recommendation", "D. Recommendation", recommendation_rows)
     st.markdown("</div>", unsafe_allow_html=True)
 
 
