@@ -184,6 +184,42 @@ class CapacityGovernanceTests(unittest.TestCase):
         self.assertAlmostEqual(output["recommended_capacity_mt_day"], 40.0, places=3)
         self.assertEqual(output["new_plant_required"], "No")
 
+    def test_o_recommended_configuration_for_9_4_mt_day(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 9.4},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+        )
+        self.assertEqual(output["recommended_configuration_label"], "1 line × 1 shift")
+        self.assertAlmostEqual(output["recommended_capacity_mt_day"], 10.0, places=3)
+
+    def test_p_recommended_configuration_for_15_mt_day(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 15.0},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+        )
+        self.assertEqual(output["recommended_configuration_label"], "1 line × 2 shifts")
+        self.assertAlmostEqual(output["recommended_capacity_mt_day"], 20.0, places=3)
+
+    def test_q_new_plant_required_when_required_output_exceeds_60(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 61.0},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+            existing_plant_expandable=False,
+        )
+        self.assertEqual(output["new_plant_required"], "Yes")
+
 
 class PlantNormalizationHotfixTests(unittest.TestCase):
     def setUp(self):

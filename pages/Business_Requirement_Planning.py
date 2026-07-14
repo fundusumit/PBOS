@@ -1078,6 +1078,7 @@ KPI_ICONS = {
 PLANT_ICON_KEYS = {
     "Required Output": "finished_goods_day",
     "Current Plant Configuration": "production_lines",
+    "Recommended Plant Configuration": "production_lines",
     "Current Installed Capacity": "installed_capacity_day",
     "Maximum Current-Site Capacity": "corporate_capacity",
     "Plant Utilization": "plant_utilization",
@@ -3409,8 +3410,10 @@ required_output_mt_day = float(plant_capacity_output.get("required_capacity_mt_d
 installed_lines = int(round(float(plant_capacity_output.get("current_installed_lines", plant_capacity_output.get("installed_lines", plant_capacity_output.get("production_lines_required", 1))) or 1)))
 active_shifts = int(round(float(plant_capacity_output.get("current_active_shifts", plant_capacity_output.get("active_shifts", plant_capacity_output.get("shifts_required", 1))) or 1)))
 current_configuration_label = str(plant_capacity_output.get("current_configuration_label", f"{installed_lines:,.0f} {'line' if installed_lines == 1 else 'lines'} × {active_shifts:,.0f} {'shift' if active_shifts == 1 else 'shifts'}"))
+recommended_configuration_label = str(plant_capacity_output.get("recommended_configuration_label", current_configuration_label))
 base_capacity = float(plant_capacity_output.get("plant_base_capacity_mt_day", plant_capacity_output.get("capacity_per_line_mt_day", 0.0)) or 0.0)
 installed_capacity_mt_day = float(plant_capacity_output.get("current_installed_capacity_mt_day", plant_capacity_output.get("installed_capacity_mt_day", 0.0)) or 0.0)
+recommended_capacity_mt_day = float(plant_capacity_output.get("recommended_capacity_mt_day", installed_capacity_mt_day) or installed_capacity_mt_day)
 max_capacity_mt_day = float(plant_capacity_output.get("maximum_current_plant_capacity_mt_day", installed_capacity_mt_day) or installed_capacity_mt_day)
 current_load_ratio_pct = float(plant_capacity_output.get("current_load_ratio_pct", plant_capacity_output.get("plant_utilization_pct", 0.0)) or 0.0)
 recommended_action = str(plant_capacity_output.get("recommended_action", "Continue Current Configuration"))
@@ -3422,7 +3425,7 @@ with colp1:
 with colp2:
     plant_kpi_card("Current Installed Capacity", f"{installed_capacity_mt_day:,.1f} MT/day", "plant_kpi_installed_capacity", subtitle="Base x lines x shifts")
 with colp3:
-    plant_kpi_card("Current Plant Configuration", current_configuration_label, "plant_kpi_current_configuration", subtitle=f"{base_capacity:,.1f} MT/day per line per shift")
+    plant_kpi_card("Recommended Plant Configuration", recommended_configuration_label, "plant_kpi_recommended_configuration", subtitle=f"{recommended_capacity_mt_day:,.1f} MT/day recommended capacity")
 with colp4:
     plant_kpi_card("Maximum Current-Site Capacity", f"{max_capacity_mt_day:,.1f} MT/day", "plant_kpi_max_site_capacity", subtitle="Within current-site governance")
 
