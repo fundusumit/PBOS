@@ -3378,12 +3378,7 @@ log_section_end("Commercial & Distribution Planning")
 
 log_section_start("Plant Capacity Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
-plant_title_col, plant_action_col = st.columns([0.8, 0.2])
-with plant_title_col:
-    st.markdown("<div class='pbos-section-title'>Plant Capacity Planning</div>", unsafe_allow_html=True)
-with plant_action_col:
-    if st.button("Open Capacity Governance", key="open_capacity_governance"):
-        show_plant_capacity_governance_dialog()
+st.markdown("<div class='pbos-section-title'>Plant Capacity Planning</div>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-subtitle'>Capacity required by the plant to support assigned market demand.</div>", unsafe_allow_html=True)
 colp1, colp2, colp3, colp4 = st.columns(4)
 required_output_mt_day = float(plant_capacity_output.get("required_capacity_mt_day", plant_capacity_output.get("finished_goods_mt_day", 0.0)) or 0.0)
@@ -3408,7 +3403,17 @@ with colp4:
 
 colp5, colp6, colp7, colp8 = st.columns(4)
 with colp5:
-    plant_kpi_card("Plant Utilization", f"{current_load_ratio_pct:,.1f}%", "plant_kpi_utilization", subtitle="Demand load vs current installed capacity", status="Normal" if current_load_ratio_pct <= 85 else "Monitor" if current_load_ratio_pct <= 90 else "Expansion Review" if current_load_ratio_pct <= 95 else "Critical" if current_load_ratio_pct <= 100 else "Capacity Deficit", status_type="pbos-status-positive" if current_load_ratio_pct <= 85 else "pbos-status-warn" if current_load_ratio_pct <= 95 else "pbos-status-alert")
+    render_kpi_card(
+        "Plant Utilization",
+        f"{current_load_ratio_pct:,.1f}%",
+        subtitle="Demand load vs current installed capacity",
+        status="Normal" if current_load_ratio_pct <= 85 else "Monitor" if current_load_ratio_pct <= 90 else "Expansion Review" if current_load_ratio_pct <= 95 else "Critical" if current_load_ratio_pct <= 100 else "Capacity Deficit",
+        status_type="pbos-status-positive" if current_load_ratio_pct <= 85 else "pbos-status-warn" if current_load_ratio_pct <= 95 else "pbos-status-alert",
+        icon_key=PLANT_ICON_KEYS.get("Plant Utilization"),
+        button_label="View details",
+        key="plant_kpi_utilization_details",
+        button_action=show_plant_capacity_governance_dialog,
+    )
 with colp6:
     plant_kpi_card("Recommended Capacity Action", recommended_action, "plant_kpi_recommended_action", subtitle=action_subtitle, status=recommended_action, status_type="pbos-status-warn" if recommended_action in {"Add Shift", "Add Production Line", "Expand Existing Plant"} else "pbos-status-alert" if recommended_action == "Build New Plant" else "pbos-status-positive")
 with colp7:
