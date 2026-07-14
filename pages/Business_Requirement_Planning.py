@@ -348,46 +348,59 @@ st.markdown("""
     padding-bottom: 5rem;
 }
 .pbos-capacity-panel {
-    border: 1px solid #e6ebf2;
-    border-radius: 12px;
     background: #ffffff;
-    margin-bottom: 10px;
+    border: 1px solid #cfd6e3;
+    border-radius: 18px;
     overflow: hidden;
+    margin-bottom: 10px;
+}
+.pbos-capacity-panel,
+.pbos-capacity-panel * {
+    color: #172033 !important;
+}
+div[data-testid="stDialog"] .pbos-capacity-panel .pbos-capacity-label {
+    color: #4b5563 !important;
+}
+div[data-testid="stDialog"] .pbos-capacity-panel .pbos-capacity-value {
+    color: #111827 !important;
 }
 .pbos-capacity-panel-title {
-    font-size: 18px;
-    font-weight: 700;
-    line-height: 1.3;
-    color: #1e293b;
-    padding: 10px 12px;
-    background: #f8fafc;
-    border-bottom: 1px solid #eef2f7;
+    background: #f7f9fc;
+    padding: 1rem 1.1rem;
+    border-bottom: 1px solid #d9dee8;
+    font-size: 1.2rem;
+    line-height: 1.25;
+    color: #172033 !important;
+    font-weight: 800;
 }
-.pbos-capacity-summary-table {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-    font-size: 15px;
+.pbos-capacity-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);
+    gap: 1rem;
+    align-items: center;
+    padding: 1rem 1.1rem;
+    border-top: 1px solid #d9dee8;
 }
-.pbos-capacity-summary-table td {
-    border-bottom: 1px solid #eef2f7;
-    padding: 10px 12px;
-    text-align: left;
-    vertical-align: top;
+.pbos-capacity-row:first-child {
+    border-top: none;
+}
+.pbos-capacity-label {
+    color: #4b5563 !important;
+    font-weight: 600;
+    min-width: 0;
     white-space: normal;
-    word-break: break-word;
     overflow-wrap: anywhere;
+    word-break: break-word;
     line-height: 1.35;
 }
-.pbos-capacity-summary-table tbody tr:last-child td {
-    border-bottom: none;
-}
-.pbos-capacity-summary-metric {
-    width: 60%;
+.pbos-capacity-value {
+    color: #111827 !important;
     font-weight: 700;
-}
-.pbos-capacity-summary-value {
-    width: 40%;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.35;
 }
 .pbos-capacity-formula-card {
     border: 1px solid #dbe3ee;
@@ -538,15 +551,16 @@ st.markdown("""
     .pbos-capacity-panel {
         margin-bottom: 8px;
     }
-    .pbos-capacity-panel-title {
-        font-size: 18px;
-        padding: 8px 10px;
+    .pbos-capacity-row {
+        grid-template-columns: 1fr;
+        gap: 0.35rem;
+        align-items: start;
     }
-    .pbos-capacity-summary-table {
-        font-size: 15px;
+    .pbos-capacity-label {
+        font-size: 0.95rem;
     }
-    .pbos-capacity-summary-table td {
-        padding: 8px 10px;
+    .pbos-capacity-value {
+        font-size: 1.05rem;
     }
 }
 @media (max-width: 600px) {
@@ -949,12 +963,12 @@ def utilization_status(utilization_pct):
 
 
 def render_capacity_detail_section(section_key, section_title, rows):
-    table_row_html = "".join(
+    row_html = "".join(
         (
-            "<tr>"
-            f"<td class='pbos-capacity-summary-metric'>{escape(str(row.get('Metric', '')))}</td>"
-            f"<td class='pbos-capacity-summary-value'>{escape(str(row.get('Value', '')))}</td>"
-            "</tr>"
+            "<div class='pbos-capacity-row'>"
+            f"<div class='pbos-capacity-label'>{escape(str(row.get('Metric', '')))}</div>"
+            f"<div class='pbos-capacity-value'>{escape(str(row.get('Value', '')))}</div>"
+            "</div>"
         )
         for row in rows
     )
@@ -962,13 +976,7 @@ def render_capacity_detail_section(section_key, section_title, rows):
         f"""
         <div class='pbos-capacity-panel' id='pbos-capacity-panel-{escape(section_key)}'>
           <div class='pbos-capacity-panel-title'>{escape(str(section_title))}</div>
-          <table class='pbos-capacity-summary-table'>
-            <colgroup>
-              <col style='width:60%;'>
-              <col style='width:40%;'>
-            </colgroup>
-            <tbody>{table_row_html}</tbody>
-          </table>
+                    {row_html}
         </div>
         """,
         unsafe_allow_html=True,
