@@ -880,9 +880,10 @@ def _recommended_action_subtitle(output):
 def render_plant_capacity_governance_dialog():
     required_output = float(plant_capacity_output.get("required_capacity_mt_day", plant_capacity_output.get("finished_goods_mt_day", 0.0)) or 0.0)
     base_capacity = float(plant_capacity_output.get("plant_base_capacity_mt_day", plant_capacity_output.get("capacity_per_line_mt_day", 0.0)) or 0.0)
-    installed_lines = int(round(float(plant_capacity_output.get("installed_lines", plant_capacity_output.get("production_lines_required", 1)) or 1)))
-    active_shifts = int(round(float(plant_capacity_output.get("active_shifts", plant_capacity_output.get("shifts_required", 1)) or 1)))
-    installed_capacity = float(plant_capacity_output.get("installed_capacity_mt_day", 0.0) or 0.0)
+    installed_lines = int(round(float(plant_capacity_output.get("current_installed_lines", plant_capacity_output.get("installed_lines", plant_capacity_output.get("production_lines_required", 1))) or 1)))
+    active_shifts = int(round(float(plant_capacity_output.get("current_active_shifts", plant_capacity_output.get("active_shifts", plant_capacity_output.get("shifts_required", 1))) or 1)))
+    current_configuration_label = str(plant_capacity_output.get("current_configuration_label", f"{installed_lines:,.0f} {'line' if installed_lines == 1 else 'lines'} × {active_shifts:,.0f} {'shift' if active_shifts == 1 else 'shifts'}"))
+    installed_capacity = float(plant_capacity_output.get("current_installed_capacity_mt_day", plant_capacity_output.get("installed_capacity_mt_day", 0.0)) or 0.0)
     max_shifts = int(round(float(plant_capacity_output.get("maximum_shifts_per_line", plant_capacity_output.get("max_shifts", 3)) or 3)))
     max_lines = int(round(float(plant_capacity_output.get("maximum_lines_in_current_plant", installed_lines) or installed_lines)))
     max_site_capacity = float(plant_capacity_output.get("maximum_current_plant_capacity_mt_day", 0.0) or 0.0)
@@ -893,6 +894,7 @@ def render_plant_capacity_governance_dialog():
     recommended_lines = int(round(float(plant_capacity_output.get("recommended_lines", installed_lines) or installed_lines)))
     recommended_shifts = int(round(float(plant_capacity_output.get("recommended_shifts", active_shifts) or active_shifts)))
     recommended_capacity = float(plant_capacity_output.get("recommended_capacity_mt_day", installed_capacity) or installed_capacity)
+    recommended_configuration_label = str(plant_capacity_output.get("recommended_configuration_label", f"{recommended_lines:,.0f} {'line' if recommended_lines == 1 else 'lines'} × {recommended_shifts:,.0f} {'shift' if recommended_shifts == 1 else 'shifts'}"))
     remaining_shift_capacity = float(plant_capacity_output.get("remaining_shift_capacity_mt_day", 0.0) or 0.0)
     remaining_line_capacity = float(plant_capacity_output.get("remaining_line_capacity_mt_day", 0.0) or 0.0)
     remaining_site_capacity = float(plant_capacity_output.get("remaining_current_site_capacity_mt_day", 0.0) or 0.0)
@@ -910,10 +912,10 @@ def render_plant_capacity_governance_dialog():
 
     st.markdown("**Capacity Plan Summary**")
     summary_rows = pd.DataFrame([
-        {"Block": "Current State", "Value": f"{installed_lines:,.0f} line(s), {active_shifts:,.0f} shift(s), {installed_capacity:,.1f} MT/day"},
+        {"Block": "Current State", "Value": f"{current_configuration_label}, {installed_capacity:,.1f} MT/day"},
         {"Block": "Demand", "Value": f"{required_output:,.1f} MT/day"},
         {"Block": "Gap", "Value": f"{capacity_shortfall:,.1f} MT/day shortfall" if capacity_shortfall > 0 else f"{capacity_headroom:,.1f} MT/day headroom"},
-        {"Block": "Recommended State", "Value": f"{recommended_lines:,.0f} line(s), {recommended_shifts:,.0f} shift(s), {recommended_capacity:,.1f} MT/day"},
+        {"Block": "Recommended State", "Value": f"{recommended_configuration_label}, {recommended_capacity:,.1f} MT/day"},
         {"Block": "Projected Utilization", "Value": f"{projected_utilization:,.1f}%"},
         {"Block": "New Plant", "Value": "Required" if new_plant_required == "Yes" else "Not Required"},
     ])
@@ -931,6 +933,7 @@ def render_plant_capacity_governance_dialog():
 
     st.markdown("**B. Current Plant Configuration**")
     config_rows = pd.DataFrame([
+        {"Metric": "Current Configuration", "Value": current_configuration_label},
         {"Metric": "Base Capacity per Line per Shift", "Value": f"{base_capacity:,.1f} MT/day"},
         {"Metric": "Installed Lines", "Value": f"{installed_lines:,.0f}"},
         {"Metric": "Active Shifts", "Value": f"{active_shifts:,.0f}"},
@@ -953,6 +956,9 @@ def render_plant_capacity_governance_dialog():
     render_display_dataframe(st, "plant_capacity_expansion_headroom", headroom_rows, hide_index=True, width="stretch")
 
     st.markdown("**D. Recommended Next Action**")
+    st.write(f"Recommended Configuration: {recommended_configuration_label}")
+    st.write(f"Recommended Capacity: {recommended_capacity:,.1f} MT/day")
+    st.write(f"Projected Utilization at Recommended Capacity: {projected_utilization:,.1f}%")
     st.write(recommended_action)
     if supporting_actions:
         st.write("Supporting step(s): " + ", ".join([str(x) for x in supporting_actions]))
@@ -1858,7 +1864,9 @@ def load_market_registry(path):
 def load_plant_registry(path):
     columns = [
         "plant_id", "plant_name", "city", "state", "status", "production_mode",
-        "installed_capacity_mt_day", "line_capacity_mt_day", "maximum_shifts",
+        "installed_capacity_mt_day", "line_capacity_mt_day", "installed_lines", "active_shifts",
+        "maximum_lines_in_current_plant", "maximum_shifts_per_line", "maximum_shifts",
+        "existing_plant_expandable",
         "cold_storage_capacity_mt", "served_markets", "is_default"
     ]
     if not os.path.exists(path):
@@ -1871,7 +1879,12 @@ def load_plant_registry(path):
             "production_mode": "Semi Automatic",
             "installed_capacity_mt_day": 10.0,
             "line_capacity_mt_day": 10.0,
+            "installed_lines": 1,
+            "active_shifts": 1,
+            "maximum_lines_in_current_plant": 2,
+            "maximum_shifts_per_line": 3,
             "maximum_shifts": 3,
+            "existing_plant_expandable": "Yes",
             "cold_storage_capacity_mt": 30.0,
             "served_markets": "Kolkata|Guwahati|Patna|Bhubaneswar",
             "is_default": "Yes",
@@ -1887,6 +1900,17 @@ def load_plant_registry(path):
     df["production_mode"] = df["production_mode"].fillna("Semi Automatic")
     df["installed_capacity_mt_day"] = pd.to_numeric(df["installed_capacity_mt_day"], errors="coerce").fillna(10.0)
     df["line_capacity_mt_day"] = pd.to_numeric(df["line_capacity_mt_day"], errors="coerce").fillna(10.0)
+    df["installed_lines"] = pd.to_numeric(df["installed_lines"], errors="coerce").fillna(1).astype(int)
+    df["active_shifts"] = pd.to_numeric(df["active_shifts"], errors="coerce").fillna(1).astype(int)
+    df["maximum_lines_in_current_plant"] = pd.to_numeric(df["maximum_lines_in_current_plant"], errors="coerce").fillna(df["installed_lines"].clip(lower=1) + 1).astype(int)
+    if "maximum_shifts_per_line" in df.columns:
+        max_shift_series = pd.to_numeric(df["maximum_shifts_per_line"], errors="coerce")
+    else:
+        max_shift_series = pd.Series([None] * len(df))
+    fallback_max_shifts = pd.to_numeric(df["maximum_shifts"], errors="coerce") if "maximum_shifts" in df.columns else pd.Series([3] * len(df))
+    df["maximum_shifts_per_line"] = max_shift_series.fillna(fallback_max_shifts).fillna(3).astype(int)
+    df["maximum_shifts"] = df["maximum_shifts_per_line"]
+    df["existing_plant_expandable"] = df["existing_plant_expandable"].fillna("Yes")
     df["maximum_shifts"] = pd.to_numeric(df["maximum_shifts"], errors="coerce").fillna(3).astype(int)
     df["cold_storage_capacity_mt"] = pd.to_numeric(df["cold_storage_capacity_mt"], errors="coerce").fillna(30.0)
     df["is_default"] = df["is_default"].fillna("No")
@@ -3382,10 +3406,11 @@ st.markdown("<div class='pbos-section-title'>Plant Capacity Planning</div>", uns
 st.markdown("<div class='pbos-section-subtitle'>Capacity required by the plant to support assigned market demand.</div>", unsafe_allow_html=True)
 colp1, colp2, colp3, colp4 = st.columns(4)
 required_output_mt_day = float(plant_capacity_output.get("required_capacity_mt_day", plant_capacity_output.get("finished_goods_mt_day", 0.0)) or 0.0)
-installed_lines = int(round(float(plant_capacity_output.get("installed_lines", plant_capacity_output.get("production_lines_required", 1)) or 1)))
-active_shifts = int(round(float(plant_capacity_output.get("active_shifts", plant_capacity_output.get("shifts_required", 1)) or 1)))
+installed_lines = int(round(float(plant_capacity_output.get("current_installed_lines", plant_capacity_output.get("installed_lines", plant_capacity_output.get("production_lines_required", 1))) or 1)))
+active_shifts = int(round(float(plant_capacity_output.get("current_active_shifts", plant_capacity_output.get("active_shifts", plant_capacity_output.get("shifts_required", 1))) or 1)))
+current_configuration_label = str(plant_capacity_output.get("current_configuration_label", f"{installed_lines:,.0f} {'line' if installed_lines == 1 else 'lines'} × {active_shifts:,.0f} {'shift' if active_shifts == 1 else 'shifts'}"))
 base_capacity = float(plant_capacity_output.get("plant_base_capacity_mt_day", plant_capacity_output.get("capacity_per_line_mt_day", 0.0)) or 0.0)
-installed_capacity_mt_day = float(plant_capacity_output.get("installed_capacity_mt_day", 0.0) or 0.0)
+installed_capacity_mt_day = float(plant_capacity_output.get("current_installed_capacity_mt_day", plant_capacity_output.get("installed_capacity_mt_day", 0.0)) or 0.0)
 max_capacity_mt_day = float(plant_capacity_output.get("maximum_current_plant_capacity_mt_day", installed_capacity_mt_day) or installed_capacity_mt_day)
 current_load_ratio_pct = float(plant_capacity_output.get("current_load_ratio_pct", plant_capacity_output.get("plant_utilization_pct", 0.0)) or 0.0)
 recommended_action = str(plant_capacity_output.get("recommended_action", "Continue Current Configuration"))
@@ -3397,7 +3422,7 @@ with colp1:
 with colp2:
     plant_kpi_card("Current Installed Capacity", f"{installed_capacity_mt_day:,.1f} MT/day", "plant_kpi_installed_capacity", subtitle="Base x lines x shifts")
 with colp3:
-    plant_kpi_card("Current Plant Configuration", f"{installed_lines:,.0f} lines x {active_shifts:,.0f} shifts", "plant_kpi_current_configuration", subtitle=f"{base_capacity:,.1f} MT/day per line per shift")
+    plant_kpi_card("Current Plant Configuration", current_configuration_label, "plant_kpi_current_configuration", subtitle=f"{base_capacity:,.1f} MT/day per line per shift")
 with colp4:
     plant_kpi_card("Maximum Current-Site Capacity", f"{max_capacity_mt_day:,.1f} MT/day", "plant_kpi_max_site_capacity", subtitle="Within current-site governance")
 

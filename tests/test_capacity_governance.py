@@ -132,6 +132,58 @@ class CapacityGovernanceTests(unittest.TestCase):
         )
         self.assertEqual(output["new_plant_required"], "No")
 
+    def test_k_current_config_label_1x1_capacity_10(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 5.0},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+        )
+        self.assertEqual(output["current_configuration_label"], "1 line × 1 shift")
+        self.assertAlmostEqual(output["current_installed_capacity_mt_day"], 10.0, places=3)
+
+    def test_l_current_config_label_2x1_capacity_20(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 12.0},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=2,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+        )
+        self.assertEqual(output["current_configuration_label"], "2 lines × 1 shift")
+        self.assertAlmostEqual(output["current_installed_capacity_mt_day"], 20.0, places=3)
+
+    def test_m_current_config_label_2x2_capacity_40(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 30.0},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=2,
+            active_shifts=2,
+            maximum_lines_in_current_plant=2,
+        )
+        self.assertEqual(output["current_configuration_label"], "2 lines × 2 shifts")
+        self.assertAlmostEqual(output["current_installed_capacity_mt_day"], 40.0, places=3)
+
+    def test_n_current_vs_recommended_separation_for_39_1(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 39.1},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+            existing_plant_expandable=True,
+        )
+        self.assertEqual(output["current_configuration_label"], "1 line × 1 shift")
+        self.assertAlmostEqual(output["current_installed_capacity_mt_day"], 10.0, places=3)
+        self.assertEqual(output["recommended_configuration_label"], "2 lines × 2 shifts")
+        self.assertAlmostEqual(output["recommended_capacity_mt_day"], 40.0, places=3)
+        self.assertEqual(output["new_plant_required"], "No")
+
 
 class PlantNormalizationHotfixTests(unittest.TestCase):
     def setUp(self):
@@ -155,6 +207,47 @@ class PlantNormalizationHotfixTests(unittest.TestCase):
         }
         result = build_plant_planning(plant=plant, assigned_markets=self.assigned_markets)
         self.assertIn("plant_capacity_output", result)
+
+    def test_b_series_input_runs_without_truth_value_error(self):
+        plant = pd.Series(
+            {
+                "line_capacity_mt_day": 10,
+                "installed_lines": 2,
+                "active_shifts": 1,
+                "maximum_shifts": 3,
+                "maximum_lines_in_current_plant": 2,
+                "existing_plant_expandable": "Yes",
+            }
+        )
+        result = build_plant_planning(plant=plant, assigned_markets=self.assigned_markets)
+        output = result["plant_capacity_output"]
+        self.assertEqual(output["current_configuration_label"], "2 lines × 1 shift")
+        self.assertAlmostEqual(output["current_installed_capacity_mt_day"], 20.0, places=3)
+
+    def test_c_switch_between_plants_updates_current_configuration(self):
+        plant_one = {
+            "line_capacity_mt_day": 10,
+            "installed_lines": 1,
+            "active_shifts": 1,
+            "maximum_shifts": 3,
+            "maximum_lines_in_current_plant": 2,
+            "existing_plant_expandable": "Yes",
+        }
+        plant_two = {
+            "line_capacity_mt_day": 10,
+            "installed_lines": 2,
+            "active_shifts": 1,
+            "maximum_shifts": 3,
+            "maximum_lines_in_current_plant": 3,
+            "existing_plant_expandable": "Yes",
+        }
+        result_one = build_plant_planning(plant=plant_one, assigned_markets=self.assigned_markets)
+        result_two = build_plant_planning(plant=plant_two, assigned_markets=self.assigned_markets)
+        output_one = result_one["plant_capacity_output"]
+        output_two = result_two["plant_capacity_output"]
+        self.assertEqual(output_one["current_configuration_label"], "1 line × 1 shift")
+        self.assertEqual(output_two["current_configuration_label"], "2 lines × 1 shift")
+        self.assertNotEqual(output_one["current_installed_capacity_mt_day"], output_two["current_installed_capacity_mt_day"])
 
 
 class ManpowerNormalizationHotfixTests(unittest.TestCase):

@@ -1,2 +1,2 @@
-plant_id,plant_name,city,state,status,production_mode,installed_capacity_mt_day,line_capacity_mt_day,maximum_shifts,cold_storage_capacity_mt,served_markets,is_default
-PLANT_KOL,Kolkata Plant,Kolkata,West Bengal,Active,Semi Automatic,10,10,3,30,Kolkata|Guwahati|Patna|Bhubaneswar,Yes
+plant_id,plant_name,city,state,status,production_mode,installed_capacity_mt_day,line_capacity_mt_day,installed_lines,active_shifts,maximum_lines_in_current_plant,maximum_shifts_per_line,maximum_shifts,existing_plant_expandable,cold_storage_capacity_mt,served_markets,is_default
+PLANT_KOL,Kolkata Plant,Kolkata,West Bengal,Active,Semi Automatic,10,10,1,1,2,3,3,Yes,30,Kolkata|Guwahati|Patna|Bhubaneswar,Yes
