@@ -423,13 +423,13 @@ div[data-testid="stDialog"] .pbos-capacity-panel .pbos-capacity-value {
     color: #475569;
     line-height: 1.45;
 }
-.pbos-mobile-detail-desktop {
+.pbos-detail-desktop {
     display: block;
 }
-.pbos-mobile-detail-only {
+.pbos-detail-mobile {
     display: none;
 }
-.pbos-mobile-detail-panel {
+.pbos-mobile-panel {
     width: 100%;
     box-sizing: border-box;
     background: #11151d;
@@ -437,7 +437,7 @@ div[data-testid="stDialog"] .pbos-capacity-panel .pbos-capacity-value {
     border-radius: 14px;
     overflow: hidden;
 }
-.pbos-mobile-detail-title {
+.pbos-mobile-title {
     padding: 0.9rem 1rem;
     font-size: 1.05rem;
     font-weight: 800;
@@ -445,17 +445,14 @@ div[data-testid="stDialog"] .pbos-capacity-panel .pbos-capacity-value {
     border-bottom: 1px solid #303744;
     line-height: 1.3;
 }
-.pbos-mobile-detail-row {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.25rem;
+.pbos-mobile-row {
     padding: 0.85rem 1rem;
     border-bottom: 1px solid #2a303a;
 }
-.pbos-mobile-detail-row:last-child {
+.pbos-mobile-row:last-child {
     border-bottom: none;
 }
-.pbos-mobile-detail-label {
+.pbos-mobile-label {
     color: #aeb8c7;
     font-size: 0.86rem;
     font-weight: 650;
@@ -463,16 +460,17 @@ div[data-testid="stDialog"] .pbos-capacity-panel .pbos-capacity-value {
     white-space: normal;
     overflow-wrap: anywhere;
 }
-.pbos-mobile-detail-value {
+.pbos-mobile-value {
     color: #ffffff;
     font-size: 1rem;
     font-weight: 750;
+    margin-top: 0.25rem;
     line-height: 1.4;
     white-space: normal;
     overflow-wrap: anywhere;
     word-break: break-word;
 }
-.pbos-mobile-detail-summary {
+.pbos-mobile-summary {
     margin-top: 1rem;
     padding: 0.9rem 1rem;
     background: #151a23;
@@ -633,12 +631,18 @@ div[data-testid="stDialog"] .pbos-capacity-panel .pbos-capacity-value {
     div[data-testid="stDialog"] .pbos-mobile-dialog-content {
         padding-bottom: 6rem;
     }
-    .pbos-mobile-detail-desktop {
+    .pbos-detail-desktop {
         display: none;
     }
-    .pbos-mobile-detail-only {
+    .pbos-detail-mobile {
         display: block;
         width: 100%;
+    }
+    div[data-testid="stDialog"] [data-testid="stDataFrame"] {
+        display: none !important;
+    }
+    div[data-testid="stDialog"] [data-testid="stElementToolbar"] {
+        display: none !important;
     }
 }
 @media (max-width: 600px) {
@@ -1097,12 +1101,12 @@ def _mobile_rows_from_dataframe(detail_df):
     return rows
 
 
-def render_mobile_key_value_panel(title, rows, summary_lines=None, css_class="pbos-mobile-detail-panel"):
+def render_mobile_key_value_panel(title, rows, summary_lines=None, css_class="pbos-mobile-panel"):
     row_html = "".join(
         (
-            "<div class='pbos-mobile-detail-row'>"
-            f"<div class='pbos-mobile-detail-label'>{escape(str(label))}</div>"
-            f"<div class='pbos-mobile-detail-value'>{escape(str(value))}</div>"
+            "<div class='pbos-mobile-row'>"
+            f"<div class='pbos-mobile-label'>{escape(str(label))}</div>"
+            f"<div class='pbos-mobile-value'>{escape(str(value))}</div>"
             "</div>"
         )
         for label, value in rows
@@ -1110,16 +1114,16 @@ def render_mobile_key_value_panel(title, rows, summary_lines=None, css_class="pb
     summary_html = ""
     if summary_lines:
         summary_html = (
-            "<div class='pbos-mobile-detail-summary'>"
+            "<div class='pbos-mobile-summary'>"
             + "<br>".join(escape(str(line)) for line in summary_lines if str(line).strip())
             + "</div>"
         )
 
     st.markdown(
         f"""
-        <div class='pbos-mobile-detail-only'>
+        <div class='pbos-detail-mobile'>
           <div class='{escape(css_class)}'>
-            <div class='pbos-mobile-detail-title'>{escape(str(title))}</div>
+            <div class='pbos-mobile-title'>{escape(str(title))}</div>
             {row_html}
           </div>
           {summary_html}
@@ -1130,9 +1134,8 @@ def render_mobile_key_value_panel(title, rows, summary_lines=None, css_class="pb
 
 
 def render_responsive_detail_table(table_key, title, detail_df, summary_lines=None):
-    st.markdown("<div class='pbos-mobile-detail-desktop'>", unsafe_allow_html=True)
+    st.markdown("<div class='pbos-detail-desktop'></div>", unsafe_allow_html=True)
     render_display_dataframe(st, table_key, detail_df, hide_index=True, width="stretch")
-    st.markdown("</div>", unsafe_allow_html=True)
     render_mobile_key_value_panel(title, _mobile_rows_from_dataframe(detail_df), summary_lines=summary_lines)
 
 
@@ -2019,9 +2022,6 @@ def render_distributor_channel_drilldown(kpi_name):
             st.warning(
                 f"Commercial HC variance detected: reported {int(channel_sales_output.get('commercial_hc_reported', 0) or 0):,.0f} vs component sum {int(channel_sales_output.get('commercial_hc_sum', 0) or 0):,.0f} (variance {int(channel_sales_output.get('commercial_hc_variance', 0) or 0):+,.0f})."
             )
-        st.write(f"Total commercial revenue: {fmt_currency(channel_sales_output.get('total_commercial_revenue', 0.0))}")
-        st.write(f"Markets supported: {channel_sales_output.get('total_markets_supported', 1):,.0f}")
-        st.write(f"Active accounts supported: {channel_sales_output.get('total_active_accounts_supported', 0):,.0f}")
         return
 
     st.write(f"Total commercial headcount: {channel_sales_output['total_commercial_hc']:,.0f}")
