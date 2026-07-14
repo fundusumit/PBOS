@@ -580,12 +580,22 @@ def build_manpower_output(raw_material_output, plant_capacity_output, channel_mi
             recommended = current_hc if current_hc >= selected["hc"] else selected["hc"]
         if selected.get("temporary_support") and workload > selected["support_trigger"]:
             status = "Temporary Capacity Support"
+        workload_display = f"{workload:,.1f}"
+        lower_display = f"{selected['lower']:,.1f}"
+        upper_display = f"{selected['upper']:,.1f}"
         return {
             "current_workload": workload,
+            "current_workload_numeric": workload,
+            "current_workload_display": workload_display,
             "workload_unit": unit_label,
             "current_staffing_band": selected["label"],
             "lower_threshold": selected["lower"],
+            "lower_threshold_numeric": selected["lower"],
+            "lower_threshold_display": lower_display,
             "upper_threshold": selected["upper"],
+            "upper_threshold_numeric": selected["upper"],
+            "upper_threshold_display": upper_display,
+            "threshold_display": selected["label"],
             "current_hc": current_hc,
             "recommended_hc": recommended,
             "threshold_status": status,
@@ -689,7 +699,24 @@ def build_manpower_output(raw_material_output, plant_capacity_output, channel_mi
         "warehouse": warehouse_band,
         "qa_food_safety": qa_band,
         "procurement": procurement_band,
-        "sales": {"current_workload": revenue_rupees, "workload_unit": "channel workload", "current_staffing_band": "channel coverage threshold", "lower_threshold": 0.0, "upper_threshold": revenue_rupees, "current_hc": sales, "recommended_hc": sales, "threshold_status": "Within Current Staffing Band", "business_reason": "Sales staffing is governed by channel workload and coverage thresholds, not linear revenue or tonnage."},
+        "sales": {
+            "current_workload": 0.0,
+            "current_workload_numeric": 0.0,
+            "current_workload_display": "Pending channel workload alignment",
+            "workload_unit": "coverage workload",
+            "current_staffing_band": "role productivity capacity",
+            "lower_threshold": 0.0,
+            "lower_threshold_numeric": 0.0,
+            "lower_threshold_display": "Role-specific",
+            "upper_threshold": 0.0,
+            "upper_threshold_numeric": 0.0,
+            "upper_threshold_display": "Role-specific",
+            "threshold_display": "Role-specific",
+            "current_hc": sales,
+            "recommended_hc": sales,
+            "threshold_status": "Awaiting channel workload alignment",
+            "business_reason": "Sales staffing must be aligned to coverage, outlets, distributors, territories or beats, account service load, service frequency, and sales productivity rather than revenue.",
+        },
         "marketing": marketing_band,
         "finance": finance_band,
         "hr": hr_band,
@@ -727,17 +754,117 @@ def build_manpower_output(raw_material_output, plant_capacity_output, channel_mi
 def align_manpower_sales(manpower_output, channel_sales_output):
     aligned = _normalize_mapping(manpower_output)
     channel_data = _normalize_mapping(channel_sales_output)
+
+    def _sales_workload_metrics():
+        general_trade = _normalize_mapping(channel_data.get("general_trade"))
+        modern_trade = _normalize_mapping(channel_data.get("modern_trade"))
+        quick_commerce = _normalize_mapping(channel_data.get("quick_commerce"))
+        ecommerce = _normalize_mapping(channel_data.get("ecommerce"))
+        horeca = _normalize_mapping(channel_data.get("horeca"))
+        institution = _normalize_mapping(channel_data.get("institution"))
+        exports = _normalize_mapping(channel_data.get("exports"))
+
+        parts = []
+        gt_outlets = int(_to_float(general_trade.get("target_outlets", general_trade.get("outlets", 0)), 0.0))
+        gt_distributors = int(_to_float(general_trade.get("active_distributors", general_trade.get("required_distributors", 0)), 0.0))
+        gt_beats = int(_to_float(general_trade.get("beats", 0), 0.0))
+        workload_score = 0.0
+        if gt_outlets or gt_distributors or gt_beats:
+            workload_score += gt_outlets + gt_distributors + gt_beats
+            gt_items = []
+            if gt_outlets:
+                parts.append(f"{gt_outlets:,.0f} outlets")
+            if gt_distributors:
+                parts.append(f"{gt_distributors:,.0f} distributors")
+            if gt_beats:
+                parts.append(f"{gt_beats:,.0f} beats")
+
+        mt_accounts = int(_to_float(modern_trade.get("accounts", 0), 0.0))
+        if mt_accounts:
+            workload_score += mt_accounts
+            parts.append(f"{mt_accounts:,.0f} MT accounts")
+
+        qcom_accounts = int(_to_float(quick_commerce.get("buying_accounts", 0), 0.0))
+        if qcom_accounts:
+            workload_score += qcom_accounts
+            parts.append(f"{qcom_accounts:,.0f} QCom accounts")
+
+        ecommerce_accounts = int(_to_float(ecommerce.get("accounts", 0), 0.0))
+
+        horeca_accounts = int(_to_float(horeca.get("active_accounts", horeca.get("accounts", 0)), 0.0))
+        if horeca_accounts:
+            workload_score += horeca_accounts
+            parts.append(f"{horeca_accounts:,.0f} HoReCa accounts")
+
+        institution_tenders = int(_to_float(institution.get("active_tenders_contracts", institution.get("accounts", 0)), 0.0))
+        if institution_tenders:
+            workload_score += institution_tenders
+            tender_label = "tender" if institution_tenders == 1 else "tenders"
+            parts.append(f"{institution_tenders:,.0f} institutional {tender_label}")
+
+        exports_buyers = int(_to_float(exports.get("active_buyers", 0), 0.0))
+        exports_markets = int(_to_float(exports.get("active_markets", 0), 0.0))
+        exports_scope = exports_buyers if exports_buyers > 0 else exports_markets
+        if exports_scope:
+            workload_score += exports_scope
+            export_label = "buyers" if exports_buyers > 0 else "markets"
+            parts.append(f"{exports_scope:,.0f} export {export_label}")
+
+        active_channel_count = sum(
+            1
+            for is_active in [
+                gt_outlets > 0 or gt_distributors > 0 or gt_beats > 0,
+                mt_accounts > 0,
+                qcom_accounts > 0,
+                ecommerce_accounts > 0,
+                horeca_accounts > 0,
+                institution_tenders > 0,
+                exports_scope > 0,
+            ]
+            if is_active
+        )
+        if active_channel_count:
+            workload_score += active_channel_count
+            channel_label = "channel" if active_channel_count == 1 else "channels"
+            parts.append(f"{active_channel_count:,.0f} active {channel_label}")
+
+        return {
+            "score": float(workload_score),
+            "display": " | ".join(parts) if parts else "No active commercial workload configured",
+            "active_channel_count": active_channel_count,
+        }
+
     sales_hc = int(channel_data.get("total_sales_hc", channel_data.get("total_commercial_hc", aligned.get("sales", 0))) or 0)
     aligned["sales"] = sales_hc
     staffing_bands = dict(aligned.get("staffing_bands", {}) or {})
     sales_band = dict(staffing_bands.get("sales", {}) or {})
+    sales_workload = _sales_workload_metrics()
+    workload_total = _to_float(channel_data.get("sales_operational_workload_score", channel_data.get("sales_workload_driver_total", sales_workload["score"])), sales_workload["score"])
+    complexity = _to_float(channel_data.get("revenue_complexity_factor", 1.0), 1.0)
+    productivity = _to_float(channel_data.get("effective_capacity_multiplier", 1.0), 1.0)
     sales_band.update({
-        "current_workload": _to_float(channel_data.get("selected_market_revenue", sales_band.get("current_workload", 0.0)), 0.0),
-        "current_staffing_band": "channel coverage threshold",
+        "current_workload": workload_total,
+        "current_workload_numeric": workload_total,
+        "current_workload_display": channel_data.get("sales_operational_workload_display", sales_workload["display"]),
+        "workload_unit": "coverage workload",
+        "current_staffing_band": "role productivity capacity",
+        "lower_threshold": 0.0,
+        "lower_threshold_numeric": 0.0,
+        "lower_threshold_display": "Role-specific",
+        "upper_threshold": workload_total,
+        "upper_threshold_numeric": workload_total,
+        "upper_threshold_display": "Role-specific",
+        "threshold_display": "Role-specific",
         "current_hc": sales_hc,
         "recommended_hc": sales_hc,
         "threshold_status": "Within Current Staffing Band",
-        "business_reason": "Sales staffing is governed by final channel workload, coverage thresholds, account ownership and sales coordination requirements.",
+        "business_reason": (
+            "Sales staffing is governed by coverage, GT outlets and distributor spans, territories or beats, MT and QCommerce accounts, "
+            "HoReCa service load, institutional tender coverage, export buyers, service frequency, and sales productivity. "
+            "Revenue is used only as a stepped complexity signal, not as a linear headcount driver."
+        ),
+        "context_complexity": complexity,
+        "context_productivity": productivity,
     })
     staffing_bands["sales"] = sales_band
     aligned["staffing_bands"] = staffing_bands
@@ -1362,7 +1489,57 @@ def build_distributor_output(market_revenue=0.0, product_mix=None, fresh_revenue
     }
 
 
-def build_channel_sales_output(market_revenue=0.0, channel_mix=None, working_days=25, gt_revenue_per_sales_executive=6000000.0, gt_outlets_per_sales_executive=120, gt_sales_executives_per_asm=6, mt_revenue_per_kam=12000000.0, quick_commerce_revenue_per_kam=10000000.0, horeca_revenue_per_sales_executive=6000000.0, institution_revenue_per_account_manager=10000000.0, calls_per_sales_executive_day=20, distributor_output=None, business_stage=None, live_bird_rate=120.0, horeca_revenue_mode="CONTRACT", horeca_contract_rate_per_kg=None, horeca_contract_volume_kg_month=0.0, horeca_active_accounts=0, horeca_credit_days=30, institutional_revenue_mode="CONTRACT", institutional_contract_rate_per_kg=None, institutional_awarded_volume_kg_month=0.0, institutional_contract_name="", institutional_contract_start_date="", institutional_contract_end_date="", revenue_mode="PLANNING", procurement_drivers=None, operating_model=None):
+def build_channel_sales_output(
+    market_revenue=0.0,
+    channel_mix=None,
+    working_days=25,
+    gt_revenue_per_sales_executive=6000000.0,
+    gt_outlets_per_sales_executive=120,
+    gt_sales_executives_per_asm=6,
+    mt_revenue_per_kam=12000000.0,
+    quick_commerce_revenue_per_kam=10000000.0,
+    horeca_revenue_per_sales_executive=6000000.0,
+    institution_revenue_per_account_manager=10000000.0,
+    calls_per_sales_executive_day=20,
+    distributor_output=None,
+    business_stage=None,
+    live_bird_rate=120.0,
+    horeca_revenue_mode="CONTRACT",
+    horeca_contract_rate_per_kg=None,
+    horeca_contract_volume_kg_month=0.0,
+    horeca_active_accounts=0,
+    horeca_credit_days=30,
+    institutional_revenue_mode="CONTRACT",
+    institutional_contract_rate_per_kg=None,
+    institutional_awarded_volume_kg_month=0.0,
+    institutional_contract_name="",
+    institutional_contract_start_date="",
+    institutional_contract_end_date="",
+    revenue_mode="PLANNING",
+    procurement_drivers=None,
+    operating_model=None,
+    gt_target_outlets=None,
+    gt_distributors=None,
+    mt_active_accounts=None,
+    qcom_buying_accounts=None,
+    qcom_buying_regions=None,
+    institutional_active_tenders=None,
+    ecommerce_active_accounts=None,
+    exports_active_markets=None,
+    exports_active_buyers=None,
+    distributors_per_manager=8,
+    mt_accounts_per_kam=4,
+    qcom_accounts_per_kam=3,
+    horeca_accounts_per_manager=4,
+    institutional_tenders_per_manager=4,
+    ecommerce_accounts_per_manager=4,
+    exports_buyers_per_manager=3,
+    sales_executives_per_manager=None,
+    sales_productivity_factor=1.0,
+    digital_enablement_factor=1.0,
+    distributor_self_service_factor=1.0,
+    sales_automation_factor=1.0,
+):
     revenue = _to_float(market_revenue, 0.0)
     shares = {
         "gt": _mix_share(channel_mix, "gt", 0.35),
@@ -1394,36 +1571,242 @@ def build_channel_sales_output(market_revenue=0.0, channel_mix=None, working_day
     exports_revenue = residual * residual_shares["exports"] / residual_total
     total_commercial_revenue = gt_revenue + mt_revenue + qcom_revenue + ecommerce_revenue + horeca_revenue + inst_revenue + exports_revenue
     gap = revenue - total_commercial_revenue
-    gt_hc = max(1, _required_count(gt_revenue, gt_revenue_per_sales_executive))
-    mt_hc = _required_count(mt_revenue, mt_revenue_per_kam)
-    qcom_hc = _required_count(qcom_revenue, quick_commerce_revenue_per_kam)
-    horeca_hc = max(1 if horeca_revenue > 0 else 0, _required_count(horeca_revenue, horeca_revenue_per_sales_executive))
-    inst_hc = 1 if inst_revenue > 0 else 0
-    sales_manager = 1
-    sales_coordinator = 1 if revenue > 100000000 else 0
-    ecommerce_hc = 0
-    exports_hc = 0
-    commercial_hc_sum = sales_manager + gt_hc + mt_hc + qcom_hc + ecommerce_hc + horeca_hc + inst_hc + exports_hc
+    def _revenue_complexity_factor(monthly_revenue):
+        if monthly_revenue <= 100000000.0:
+            return 1.00
+        if monthly_revenue <= 250000000.0:
+            return 1.05
+        if monthly_revenue <= 500000000.0:
+            return 1.10
+        if monthly_revenue <= 750000000.0:
+            return 1.15
+        return 1.20
+
+    revenue_complexity_factor = _revenue_complexity_factor(revenue)
+    productivity_factor = max(0.5, _to_float(sales_productivity_factor, 1.0))
+    digital_factor = max(0.5, _to_float(digital_enablement_factor, 1.0))
+    self_service_factor = max(0.5, _to_float(distributor_self_service_factor, 1.0))
+    automation_factor = max(0.5, _to_float(sales_automation_factor, 1.0))
+    effective_capacity_multiplier = productivity_factor * digital_factor * self_service_factor * automation_factor
+
+    default_gt_outlets = 400
+    default_gt_distributors = 6
+    default_mt_accounts = 7
+    default_qcom_accounts = 2
+    default_ecommerce_accounts = 0
+
+    gt_revenue_capacity_per_distributor = (
+        (distributor_output or {}).get("fresh_revenue_capacity_per_distributor", 4000000.0)
+        if isinstance(distributor_output, dict)
+        else 4000000.0
+    )
+
+    outlets_per_exec_base = max(1.0, _to_float(gt_outlets_per_sales_executive, 120.0))
+    outlets_per_exec_effective = max(1.0, outlets_per_exec_base * effective_capacity_multiplier)
+    derived_gt_outlets = default_gt_outlets if gt_revenue > 0 else 0
+    gt_outlets = int(_to_float(gt_target_outlets, derived_gt_outlets)) if gt_target_outlets is not None else int(derived_gt_outlets)
+    required_distributors = 0 if gt_outlets <= 0 else default_gt_distributors
+    gt_distributors_planned = int(_to_float(gt_distributors, required_distributors)) if gt_distributors is not None else int(required_distributors)
+
+    distributors_per_manager_base = max(1.0, _to_float(distributors_per_manager, 8.0))
+    distributors_per_manager_effective = max(1.0, distributors_per_manager_base * effective_capacity_multiplier)
+    gt_sales_executives = 0 if gt_outlets <= 0 else int(math.ceil(gt_outlets / outlets_per_exec_effective))
+    gt_distributor_managers = 0 if gt_distributors_planned <= 0 else int(math.ceil(gt_distributors_planned / distributors_per_manager_effective))
+    gt_hc = gt_sales_executives + gt_distributor_managers
+
+    mt_accounts_base = max(1.0, _to_float(mt_accounts_per_kam, 4.0))
+    mt_accounts_effective = max(1.0, mt_accounts_base * effective_capacity_multiplier)
+    derived_mt_accounts = default_mt_accounts if mt_revenue > 0 else 0
+    mt_accounts = int(_to_float(mt_active_accounts, derived_mt_accounts)) if mt_active_accounts is not None else int(derived_mt_accounts)
+    mt_hc = 0 if mt_accounts <= 0 else int(math.ceil(mt_accounts / mt_accounts_effective))
+
+    qcom_accounts_base = max(1.0, _to_float(qcom_accounts_per_kam, 3.0))
+    qcom_accounts_effective = max(1.0, qcom_accounts_base * effective_capacity_multiplier)
+    derived_qcom_accounts = default_qcom_accounts if qcom_revenue > 0 else 0
+    qcom_buying_accounts = int(_to_float(qcom_buying_accounts, derived_qcom_accounts)) if qcom_buying_accounts is not None else int(derived_qcom_accounts)
+    derived_qcom_regions = 0 if qcom_buying_accounts <= 0 else max(1, int(math.ceil(qcom_buying_accounts / 2.0)))
+    qcom_buying_regions = int(_to_float(qcom_buying_regions, derived_qcom_regions)) if qcom_buying_regions is not None else int(derived_qcom_regions)
+    qcom_dark_stores = 0 if qcom_revenue <= 0 else qcom_buying_regions * 12
+    qcom_weighted_workload = qcom_buying_accounts + 0.5 * qcom_buying_regions + 0.05 * qcom_dark_stores
+    qcom_hc = 0 if qcom_weighted_workload <= 0 else int(math.ceil(qcom_weighted_workload / qcom_accounts_effective))
+
+    ecommerce_accounts_base = max(1.0, _to_float(ecommerce_accounts_per_manager, 4.0))
+    ecommerce_accounts_effective = max(1.0, ecommerce_accounts_base * effective_capacity_multiplier)
+    derived_ecommerce_accounts = default_ecommerce_accounts if ecommerce_revenue > 0 else 0
+    ecommerce_accounts = int(_to_float(ecommerce_active_accounts, derived_ecommerce_accounts)) if ecommerce_active_accounts is not None else int(derived_ecommerce_accounts)
+    ecommerce_hc = 0 if ecommerce_accounts <= 0 else int(math.ceil(ecommerce_accounts / ecommerce_accounts_effective))
+
+    horeca_accounts_base = max(1.0, _to_float(horeca_accounts_per_manager, 4.0))
+    horeca_accounts_effective = max(1.0, horeca_accounts_base * effective_capacity_multiplier)
+    derived_horeca_accounts = 0 if horeca_revenue <= 0 else max(1, int(math.ceil(horeca_revenue / max(1.0, _to_float(horeca_revenue_per_sales_executive, 1.0) / horeca_accounts_base))))
+    horeca_accounts = int(_to_float(horeca_active_accounts, derived_horeca_accounts)) if horeca_active_accounts else int(derived_horeca_accounts)
+    horeca_hc = 0 if horeca_accounts <= 0 else int(math.ceil(horeca_accounts / horeca_accounts_effective))
+
+    institutional_tenders_base = max(1.0, _to_float(institutional_tenders_per_manager, 4.0))
+    institutional_tenders_effective = max(1.0, institutional_tenders_base * effective_capacity_multiplier)
+    derived_institution_tenders = 1 if inst_revenue > 0 else 0
+    institution_tenders = int(_to_float(institutional_active_tenders, derived_institution_tenders)) if institutional_active_tenders is not None else int(derived_institution_tenders)
+    inst_hc = 0 if institution_tenders <= 0 else int(math.ceil(institution_tenders / institutional_tenders_effective))
+
+    exports_buyers_base = max(1.0, _to_float(exports_buyers_per_manager, 3.0))
+    exports_buyers_effective = max(1.0, exports_buyers_base * effective_capacity_multiplier)
+    derived_exports_markets = 0 if exports_revenue <= 0 else max(1, int(math.ceil(exports_revenue / 12000000.0)))
+    exports_markets = int(_to_float(exports_active_markets, derived_exports_markets)) if exports_active_markets is not None else int(derived_exports_markets)
+    derived_exports_buyers = 0 if exports_markets <= 0 else max(1, exports_markets * 2)
+    exports_buyers = int(_to_float(exports_active_buyers, derived_exports_buyers)) if exports_active_buyers is not None else int(derived_exports_buyers)
+    exports_weighted_workload = exports_buyers + 0.5 * exports_markets
+    exports_hc = 0 if exports_weighted_workload <= 0 else int(math.ceil(exports_weighted_workload / exports_buyers_effective))
+
+    frontline_hc = gt_sales_executives + mt_hc + qcom_hc + ecommerce_hc + horeca_hc + inst_hc + exports_hc
+    sales_manager = 1 if (gt_outlets + mt_accounts + qcom_buying_accounts + horeca_accounts + institution_tenders + exports_markets + ecommerce_accounts) > 0 else 0
+    span_capacity_base = max(1.0, _to_float(sales_executives_per_manager, gt_sales_executives_per_asm if sales_executives_per_manager is None else sales_executives_per_manager))
+    span_capacity_effective = max(1.0, span_capacity_base * effective_capacity_multiplier)
+    channel_leadership_hc = 0 if frontline_hc <= 10 else int(math.ceil(frontline_hc / span_capacity_effective))
+    total_active_accounts_supported = (
+        gt_outlets
+        + mt_accounts
+        + qcom_buying_accounts
+        + horeca_accounts
+        + institution_tenders
+        + ecommerce_accounts
+        + exports_buyers
+    )
+    active_channel_count = sum(
+        1
+        for is_active in [
+            gt_outlets > 0 or gt_distributors_planned > 0,
+            mt_accounts > 0,
+            qcom_buying_accounts > 0,
+            ecommerce_accounts > 0,
+            horeca_accounts > 0,
+            institution_tenders > 0,
+            exports_buyers > 0 or exports_markets > 0,
+        ]
+        if is_active
+    )
+    sales_operational_workload_score = float(
+        gt_outlets
+        + gt_distributors_planned
+        + max(0, int(_to_float(max(1, math.ceil(gt_outlets / max(1.0, _to_float(calls_per_sales_executive_day, 20) * 6))) if gt_outlets else 0, 0.0)))
+        + mt_accounts
+        + qcom_buying_accounts
+        + horeca_accounts
+        + institution_tenders
+        + (exports_buyers if exports_buyers > 0 else exports_markets)
+        + active_channel_count
+    )
+    sales_operational_workload_parts = []
+    if gt_outlets:
+        sales_operational_workload_parts.append(f"{gt_outlets:,.0f} outlets")
+    if gt_distributors_planned:
+        sales_operational_workload_parts.append(f"{gt_distributors_planned:,.0f} distributors")
+    gt_beats = max(1, math.ceil(gt_outlets / max(1.0, _to_float(calls_per_sales_executive_day, 20) * 6))) if gt_outlets else 0
+    if gt_beats:
+        sales_operational_workload_parts.append(f"{gt_beats:,.0f} beats")
+    if mt_accounts:
+        sales_operational_workload_parts.append(f"{mt_accounts:,.0f} MT accounts")
+    if qcom_buying_accounts:
+        sales_operational_workload_parts.append(f"{qcom_buying_accounts:,.0f} QCom accounts")
+    if horeca_accounts:
+        sales_operational_workload_parts.append(f"{horeca_accounts:,.0f} HoReCa accounts")
+    if institution_tenders:
+        sales_operational_workload_parts.append(f"{institution_tenders:,.0f} institutional {'tender' if institution_tenders == 1 else 'tenders'}")
+    if exports_buyers > 0:
+        sales_operational_workload_parts.append(f"{exports_buyers:,.0f} export buyers")
+    elif exports_markets > 0:
+        sales_operational_workload_parts.append(f"{exports_markets:,.0f} export markets")
+    if active_channel_count:
+        sales_operational_workload_parts.append(f"{active_channel_count:,.0f} active {'channel' if active_channel_count == 1 else 'channels'}")
+    sales_coordinator = 1 if (total_active_accounts_supported >= 40 or frontline_hc >= 8) else 0
+
+    commercial_hc_sum = (
+        sales_manager
+        + gt_hc
+        + mt_hc
+        + qcom_hc
+        + ecommerce_hc
+        + horeca_hc
+        + inst_hc
+        + exports_hc
+        + sales_coordinator
+        + channel_leadership_hc
+    )
     commercial_hc_reported = commercial_hc_sum
     commercial_hc_variance = commercial_hc_reported - commercial_hc_sum
     commercial_hc_reconciled = commercial_hc_variance == 0
     total_hc = commercial_hc_sum
-    gt_outlets = gt_hc * int(_to_float(gt_outlets_per_sales_executive, 120))
-    gt_calls_day = gt_hc * _to_float(calls_per_sales_executive_day, 20)
-    gt_supported_revenue = gt_hc * _to_float(gt_revenue_per_sales_executive, 1.0)
-    qcom_platforms = 0 if qcom_revenue <= 0 else min(7, max(3, math.ceil(qcom_revenue / max(1.0, _to_float(quick_commerce_revenue_per_kam, 10000000.0)))))
-    qcom_buying_accounts = qcom_platforms
-    qcom_buying_regions = 0 if qcom_revenue <= 0 else max(1, min(8, qcom_platforms * 2))
-    qcom_dark_stores = 0 if qcom_revenue <= 0 else qcom_buying_regions * 12
+    gt_calls_day = gt_sales_executives * _to_float(calls_per_sales_executive_day, 20)
+    gt_supported_revenue = gt_sales_executives * (_to_float(gt_revenue_per_sales_executive, 1.0) * effective_capacity_multiplier)
+    qcom_platforms = 0 if qcom_revenue <= 0 else max(1, qcom_buying_accounts)
     qcom_avg_realization = 240.0
     qcom_monthly_volume_kg = qcom_revenue / qcom_avg_realization if qcom_avg_realization else 0.0
-    active_distributors = None
-    required_distributors = _required_count(gt_revenue, (distributor_output or {}).get("fresh_revenue_capacity_per_distributor", 4000000.0) if isinstance(distributor_output, dict) else 4000000.0)
-    outlets_per_distributor = max(1, math.ceil(gt_outlets / max(1, required_distributors))) if gt_outlets else 0
-    coverage_gap = None if active_distributors is None else max(0, required_distributors - active_distributors)
-    coverage_status = "Planning Requirement" if active_distributors is None else "Coverage Gap" if coverage_gap else "Covered"
-    horeca_obj = {**pricing, "live_bird_rate": _live_bird_rate(live_bird_rate), "average_live_bird_weight_kg": 1.8, "dressed_output_kg": 1.3, "dressed_yield_pct": 1.3 / 1.8, "processing_cost_per_kg": 12.0, "packaging_cost_per_kg": 8.0, "cold_chain_logistics_cost_per_kg": 6.0, "factory_overhead_per_kg": 5.0, "target_margin_pct": 18.0, "actual_margin_pct": 18.0, "pricing_status": "Planning Rate", "revenue": horeca_revenue, "planned_revenue": horeca_revenue, "revenue_mode": "PLANNING" if planning_mode else horeca_revenue_mode, "contract_rate_per_kg": horeca_rate, "required_volume_kg_month": horeca_revenue / max(1.0, horeca_rate), "active_accounts": int(_to_float(horeca_active_accounts, max(1, horeca_hc * 8))), "accounts": int(_to_float(horeca_active_accounts, max(1, horeca_hc * 8))), "required_hc": horeca_hc, "sales_executives": horeca_hc, "revenue_per_sales_executive": _to_float(horeca_revenue_per_sales_executive, 1.0), "credit_days": horeca_credit_days, "reconciliation_variance": horeca_revenue - horeca_mix_revenue}
-    institutional_obj = {**pricing, "live_bird_rate": _live_bird_rate(live_bird_rate), "average_live_bird_weight_kg": 1.8, "dressed_output_kg": 1.3, "dressed_yield_pct": 1.3 / 1.8, "processing_cost_per_kg": 12.0, "packaging_cost_per_kg": 8.0, "cold_chain_logistics_cost_per_kg": 6.0, "factory_overhead_per_kg": 5.0, "target_margin_pct": 18.0, "actual_margin_pct": 18.0, "pricing_status": "Planning Rate", "revenue": inst_revenue, "planned_revenue": inst_revenue, "revenue_mode": "PLANNING" if planning_mode else institutional_revenue_mode, "product": "Curry Cut", "pack_size_kg": 2.0, "pack_type": "Institutional Pack", "mrp": "No MRP", "contract_rate_per_kg": inst_rate, "contract_value_per_pack": inst_rate * 2.0, "required_volume_kg_month": inst_revenue / max(1.0, inst_rate), "required_packs_month": inst_revenue / max(1.0, inst_rate) / 2.0, "institutional_required_packs_month": inst_revenue / max(1.0, inst_rate) / 2.0, "active_tenders_contracts": 1 if inst_revenue else 0, "accounts": 1 if inst_revenue else 0, "required_hc": inst_hc, "account_managers": inst_hc, "sales_executives": inst_hc, "contract_name": institutional_contract_name, "contract_start_date": institutional_contract_start_date, "contract_end_date": institutional_contract_end_date, "reconciliation_variance": inst_revenue - inst_mix_revenue}
+    active_distributors = gt_distributors_planned
+    outlets_per_distributor = max(1, math.ceil(gt_outlets / max(1, gt_distributors_planned))) if gt_outlets else 0
+    coverage_gap = max(0, required_distributors - active_distributors)
+    coverage_status = "Coverage Gap" if coverage_gap else "Covered"
+    horeca_obj = {
+        **pricing,
+        "live_bird_rate": _live_bird_rate(live_bird_rate),
+        "average_live_bird_weight_kg": 1.8,
+        "dressed_output_kg": 1.3,
+        "dressed_yield_pct": 1.3 / 1.8,
+        "processing_cost_per_kg": 12.0,
+        "packaging_cost_per_kg": 8.0,
+        "cold_chain_logistics_cost_per_kg": 6.0,
+        "factory_overhead_per_kg": 5.0,
+        "target_margin_pct": 18.0,
+        "actual_margin_pct": 18.0,
+        "pricing_status": "Planning Rate",
+        "revenue": horeca_revenue,
+        "planned_revenue": horeca_revenue,
+        "revenue_mode": "PLANNING" if planning_mode else horeca_revenue_mode,
+        "contract_rate_per_kg": horeca_rate,
+        "required_volume_kg_month": horeca_revenue / max(1.0, horeca_rate),
+        "active_accounts": horeca_accounts,
+        "accounts": horeca_accounts,
+        "required_hc": horeca_hc,
+        "sales_executives": horeca_hc,
+        "accounts_per_manager": horeca_accounts_effective,
+        "revenue_per_sales_executive": _to_float(horeca_revenue_per_sales_executive, 1.0),
+        "credit_days": horeca_credit_days,
+        "reconciliation_variance": horeca_revenue - horeca_mix_revenue,
+    }
+    institutional_obj = {
+        **pricing,
+        "live_bird_rate": _live_bird_rate(live_bird_rate),
+        "average_live_bird_weight_kg": 1.8,
+        "dressed_output_kg": 1.3,
+        "dressed_yield_pct": 1.3 / 1.8,
+        "processing_cost_per_kg": 12.0,
+        "packaging_cost_per_kg": 8.0,
+        "cold_chain_logistics_cost_per_kg": 6.0,
+        "factory_overhead_per_kg": 5.0,
+        "target_margin_pct": 18.0,
+        "actual_margin_pct": 18.0,
+        "pricing_status": "Planning Rate",
+        "revenue": inst_revenue,
+        "planned_revenue": inst_revenue,
+        "revenue_mode": "PLANNING" if planning_mode else institutional_revenue_mode,
+        "product": "Curry Cut",
+        "pack_size_kg": 2.0,
+        "pack_type": "Institutional Pack",
+        "mrp": "No MRP",
+        "contract_rate_per_kg": inst_rate,
+        "contract_value_per_pack": inst_rate * 2.0,
+        "required_volume_kg_month": inst_revenue / max(1.0, inst_rate),
+        "required_packs_month": inst_revenue / max(1.0, inst_rate) / 2.0,
+        "institutional_required_packs_month": inst_revenue / max(1.0, inst_rate) / 2.0,
+        "active_tenders_contracts": institution_tenders,
+        "accounts": institution_tenders,
+        "required_hc": inst_hc,
+        "account_managers": inst_hc,
+        "sales_executives": inst_hc,
+        "tenders_per_manager": institutional_tenders_effective,
+        "contract_name": institutional_contract_name,
+        "contract_start_date": institutional_contract_start_date,
+        "contract_end_date": institutional_contract_end_date,
+        "reconciliation_variance": inst_revenue - inst_mix_revenue,
+    }
     return {
         "selected_market_revenue": revenue,
         "contract_revenue_total": contract_total,
@@ -1440,7 +1823,8 @@ def build_channel_sales_output(market_revenue=0.0, channel_mix=None, working_day
         "reconciliation_warning": "" if abs(gap) <= 1 else f"Revenue Reconciliation Gap: {gap:,.0f}",
         "sales_manager": sales_manager,
         "head_sales_hc": sales_manager,
-        "gt_sales_executives": gt_hc,
+        "gt_sales_executives": gt_sales_executives,
+        "gt_distributor_managers": gt_distributor_managers,
         "general_trade_hc": gt_hc,
         "mt_kam": mt_hc,
         "modern_trade_hc": mt_hc,
@@ -1459,22 +1843,38 @@ def build_channel_sales_output(market_revenue=0.0, channel_mix=None, working_day
         "institutional_government_manager": inst_hc,
         "sales_coordinator": sales_coordinator,
         "sales_coordinator_mis": sales_coordinator,
+        "channel_leadership_hc": channel_leadership_hc,
         "commercial_hc_sum": commercial_hc_sum,
         "commercial_hc_reported": commercial_hc_reported,
         "commercial_hc_variance": commercial_hc_variance,
         "commercial_hc_reconciled": commercial_hc_reconciled,
         "total_commercial_hc": total_hc,
         "total_sales_hc": total_hc,
+        "revenue_complexity_factor": revenue_complexity_factor,
+        "sales_productivity_factor": productivity_factor,
+        "digital_enablement_factor": digital_factor,
+        "distributor_self_service_factor": self_service_factor,
+        "sales_automation_factor": automation_factor,
+        "effective_capacity_multiplier": effective_capacity_multiplier,
+        "total_markets_supported": max(1, qcom_buying_regions + exports_markets),
+        "total_active_accounts_supported": total_active_accounts_supported,
+        "sales_workload_driver_total": sales_operational_workload_score,
+        "sales_operational_workload_score": sales_operational_workload_score,
+        "sales_operational_workload_display": " | ".join(sales_operational_workload_parts) if sales_operational_workload_parts else "No active commercial workload configured",
+        "sales_active_channel_count": active_channel_count,
         "general_trade": {
             "revenue": gt_revenue,
             "required_distributors": required_distributors,
-            "active_distributors": active_distributors,
+            "active_distributors": gt_distributors_planned,
             "target_outlets": gt_outlets,
-            "outlets_per_distributor": outlets_per_distributor,
-            "coverage_gap_distributors": coverage_gap,
+            "outlets_per_distributor": max(1, math.ceil(gt_outlets / max(1, gt_distributors_planned))) if gt_outlets else 0,
+            "coverage_gap_distributors": max(0, required_distributors - gt_distributors_planned),
             "coverage_status": coverage_status,
-            "sales_executives": gt_hc,
+            "sales_executives": gt_sales_executives,
+            "distributor_managers": gt_distributor_managers,
             "revenue_per_sales_executive": _to_float(gt_revenue_per_sales_executive, 1.0),
+            "effective_outlets_per_sales_executive": outlets_per_exec_effective,
+            "effective_distributors_per_manager": distributors_per_manager_effective,
             "outlets": gt_outlets,
             "outlets_per_sales_executive": _to_float(gt_outlets_per_sales_executive, 120),
             "beats": max(1, math.ceil(gt_outlets / max(1.0, _to_float(calls_per_sales_executive_day, 20) * 6))),
@@ -1483,8 +1883,16 @@ def build_channel_sales_output(market_revenue=0.0, channel_mix=None, working_day
             "calls_per_sales_executive_day": _to_float(calls_per_sales_executive_day, 20),
             "supported_revenue": gt_supported_revenue,
             "revenue_at_risk": max(0.0, gt_revenue - gt_supported_revenue),
+            "formula": "ceil(Target Outlets ÷ Effective Outlets per Executive)",
+            "manager_formula": "ceil(Distributors ÷ Effective Distributors per Manager)",
         },
-        "modern_trade": {"revenue": mt_revenue, "accounts": max(1, mt_hc * 4) if mt_revenue else 0, "kam": mt_hc},
+        "modern_trade": {
+            "revenue": mt_revenue,
+            "accounts": mt_accounts,
+            "kam": mt_hc,
+            "accounts_per_kam": mt_accounts_effective,
+            "formula": "ceil(Active MT Accounts ÷ Effective Accounts per KAM)",
+        },
         "quick_commerce": {
             "revenue": qcom_revenue,
             "active_platforms": qcom_platforms,
@@ -1493,11 +1901,29 @@ def build_channel_sales_output(market_revenue=0.0, channel_mix=None, working_day
             "buying_regions": qcom_buying_regions,
             "dark_stores_served": qcom_dark_stores,
             "dark_stores": qcom_dark_stores,
+            "weighted_workload": qcom_weighted_workload,
             "monthly_volume_kg": qcom_monthly_volume_kg,
             "kam": qcom_hc,
             "required_kam": qcom_hc,
+            "accounts_per_kam": qcom_accounts_effective,
+            "formula": "ceil(Weighted QCom Workload ÷ Effective Accounts per KAM)",
             "average_revenue_per_platform": qcom_revenue / qcom_platforms if qcom_platforms else 0.0,
             "average_volume_per_platform": qcom_monthly_volume_kg / qcom_platforms if qcom_platforms else 0.0,
+        },
+        "ecommerce": {
+            "revenue": ecommerce_revenue,
+            "accounts": ecommerce_accounts,
+            "kam": ecommerce_hc,
+            "accounts_per_manager": ecommerce_accounts_effective,
+            "formula": "ceil(Active E-commerce Accounts ÷ Effective Accounts per Manager)",
+        },
+        "exports": {
+            "revenue": exports_revenue,
+            "active_markets": exports_markets,
+            "active_buyers": exports_buyers,
+            "manager_hc": exports_hc,
+            "buyers_per_manager": exports_buyers_effective,
+            "formula": "ceil((Active Buyers + 0.5 × Active Markets) ÷ Effective Buyers per Manager)",
         },
         "horeca": horeca_obj,
         "institution": institutional_obj,
