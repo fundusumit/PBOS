@@ -290,29 +290,133 @@ def build_plant_capacity_output(
     max_shifts=3,
     cold_storage_buffer_days=3,
     utilization_threshold_pct=85.0,
+    installed_lines=None,
+    active_shifts=None,
+    maximum_lines_in_current_plant=None,
+    safe_utilization_pct=85.0,
+    review_utilization_pct=90.0,
+    critical_utilization_pct=95.0,
+    existing_plant_expandable=True,
+    expansion_line_increment=1,
 ):
-    finished_goods_mt_day = _to_float(raw_material_output.get("finished_goods_mt_day", 0.0), 0.0)
-    capacity_per_line = max(0.1, _to_float(capacity_per_line_mt_day, 10.0))
-    production_lines = max(1, math.ceil(finished_goods_mt_day / capacity_per_line)) if finished_goods_mt_day > 0 else 1
-    installed_capacity = production_lines * capacity_per_line
-    utilization = finished_goods_mt_day / installed_capacity * 100.0 if installed_capacity else 0.0
-    shifts_required = min(max(1, math.ceil(finished_goods_mt_day / capacity_per_line)), max(1, int(_to_float(max_shifts, 3))))
+    required_capacity_mt_day = max(0.0, _to_float(raw_material_output.get("finished_goods_mt_day", 0.0), 0.0))
+    plant_base_capacity_mt_day = max(0.1, _to_float(capacity_per_line_mt_day, 10.0))
+    maximum_shifts_per_line = max(1, int(round(_to_float(max_shifts, 3.0))))
+    safe_utilization_pct = _to_float(safe_utilization_pct, 85.0)
+    review_utilization_pct = _to_float(review_utilization_pct, 90.0)
+    critical_utilization_pct = _to_float(critical_utilization_pct, 95.0)
+
+    if installed_lines is None or _to_float(installed_lines, 0.0) <= 0:
+        installed_lines_candidate = 1
+    else:
+        installed_lines_candidate = max(1, int(round(_to_float(installed_lines, 1.0))))
+
+    if active_shifts is None or _to_float(active_shifts, 0.0) <= 0:
+        active_shifts_candidate = 1
+    else:
+        active_shifts_candidate = max(1, int(round(_to_float(active_shifts, 1.0))))
+    active_shifts_candidate = min(active_shifts_candidate, maximum_shifts_per_line)
+
+    if maximum_lines_in_current_plant is None or _to_float(maximum_lines_in_current_plant, 0.0) <= 0:
+        default_max_lines = max(installed_lines_candidate + 1, 2)
+        maximum_lines_in_current_plant = default_max_lines
+    maximum_lines_in_current_plant = max(installed_lines_candidate, int(round(_to_float(maximum_lines_in_current_plant, installed_lines_candidate))))
+
+    best_lines = installed_lines_candidate
+    best_shifts = active_shifts_candidate
+    best_capacity = plant_base_capacity_mt_day * best_lines * best_shifts
+    if required_capacity_mt_day > 0:
+        best_pair = None
+        for lines in range(1, maximum_lines_in_current_plant + 1):
+            for shifts in range(1, maximum_shifts_per_line + 1):
+                candidate_capacity = plant_base_capacity_mt_day * lines * shifts
+                if candidate_capacity + 1e-9 < required_capacity_mt_day:
+                    continue
+                candidate = (candidate_capacity, lines, shifts)
+                if best_pair is None or candidate < best_pair:
+                    best_pair = candidate
+        if best_pair is not None:
+            best_capacity, best_lines, best_shifts = best_pair
+
+    current_installed_capacity_mt_day = plant_base_capacity_mt_day * best_lines * best_shifts
+    installed_capacity_mt_day = current_installed_capacity_mt_day
+    maximum_current_plant_capacity_mt_day = plant_base_capacity_mt_day * maximum_lines_in_current_plant * maximum_shifts_per_line
+    capacity_gap_mt_day = required_capacity_mt_day - installed_capacity_mt_day
+    utilization = required_capacity_mt_day / installed_capacity_mt_day * 100.0 if installed_capacity_mt_day > 0 else 0.0
+
+    can_add_shift = best_shifts < maximum_shifts_per_line
+    can_add_line = best_lines < maximum_lines_in_current_plant
+    expandable = bool(existing_plant_expandable)
+    expanded_max_lines = maximum_lines_in_current_plant + max(0, int(round(_to_float(expansion_line_increment, 1.0)))) if expandable else maximum_lines_in_current_plant
+    expanded_site_capacity_mt_day = plant_base_capacity_mt_day * expanded_max_lines * maximum_shifts_per_line
+
+    expansion_stage = "A. Existing capacity sufficient"
+    recommended_action = "Continue Current Configuration"
+    if required_capacity_mt_day > maximum_current_plant_capacity_mt_day:
+        if expandable and required_capacity_mt_day <= expanded_site_capacity_mt_day:
+            expansion_stage = "E. Expand existing plant"
+            recommended_action = "Expand Existing Plant"
+        else:
+            expansion_stage = "F. Build new plant"
+            recommended_action = "Build New Plant"
+    elif utilization <= safe_utilization_pct:
+        expansion_stage = "A. Existing capacity sufficient"
+        recommended_action = "Continue Current Configuration"
+    elif utilization <= review_utilization_pct:
+        expansion_stage = "B. Increase utilization within safe threshold"
+        recommended_action = "Optimize Existing Capacity"
+    elif can_add_shift:
+        expansion_stage = "C. Add shift"
+        recommended_action = "Add Shift"
+    elif can_add_line:
+        expansion_stage = "D. Add production line"
+        recommended_action = "Add Production Line"
+    elif expandable and required_capacity_mt_day <= expanded_site_capacity_mt_day:
+        expansion_stage = "E. Expand existing plant"
+        recommended_action = "Expand Existing Plant"
+    else:
+        expansion_stage = "F. Build new plant"
+        recommended_action = "Build New Plant"
+
+    new_plant_required = recommended_action == "Build New Plant" and required_capacity_mt_day > maximum_current_plant_capacity_mt_day
+    recommended_new_plant_capacity_mt_day = max(0.0, required_capacity_mt_day - maximum_current_plant_capacity_mt_day) if new_plant_required else 0.0
+
+    expansion_required = "Yes" if utilization > _to_float(utilization_threshold_pct, 85.0) else "No"
     return {
-        "finished_goods_mt_day": finished_goods_mt_day,
-        "plant_capacity_mt_day": capacity_per_line,
-        "capacity_per_line_mt_day": capacity_per_line,
-        "installed_capacity_mt_day": installed_capacity,
-        "production_lines_required": production_lines,
+        "finished_goods_mt_day": required_capacity_mt_day,
+        "plant_capacity_mt_day": plant_base_capacity_mt_day,
+        "capacity_per_line_mt_day": plant_base_capacity_mt_day,
+        "plant_base_capacity_mt_day": plant_base_capacity_mt_day,
+        "installed_lines": best_lines,
+        "active_shifts": best_shifts,
+        "maximum_shifts_per_line": maximum_shifts_per_line,
+        "maximum_lines_in_current_plant": maximum_lines_in_current_plant,
+        "current_installed_capacity_mt_day": current_installed_capacity_mt_day,
+        "installed_capacity_mt_day": installed_capacity_mt_day,
+        "maximum_current_plant_capacity_mt_day": maximum_current_plant_capacity_mt_day,
+        "required_capacity_mt_day": required_capacity_mt_day,
+        "capacity_gap_mt_day": capacity_gap_mt_day,
+        "production_lines_required": best_lines,
         "plant_utilization_pct": utilization,
         "production_utilization_pct": utilization,
-        "shifts_required": shifts_required,
+        "shifts_required": best_shifts,
         "working_hours_per_shift": _to_float(working_hours_per_shift, 8.0),
-        "max_shifts": _to_float(max_shifts, 3.0),
+        "max_shifts": float(maximum_shifts_per_line),
         "cold_storage_buffer_days": _to_float(cold_storage_buffer_days, 3.0),
-        "cold_storage_required_mt": finished_goods_mt_day * _to_float(cold_storage_buffer_days, 3.0),
+        "cold_storage_required_mt": required_capacity_mt_day * _to_float(cold_storage_buffer_days, 3.0),
         "utilization_threshold_pct": _to_float(utilization_threshold_pct, 85.0),
-        "unused_capacity_mt_day": max(0.0, installed_capacity - finished_goods_mt_day),
-        "expansion_required": "Yes" if utilization > _to_float(utilization_threshold_pct, 85.0) else "No",
+        "safe_utilization_pct": safe_utilization_pct,
+        "review_utilization_pct": review_utilization_pct,
+        "critical_utilization_pct": critical_utilization_pct,
+        "unused_capacity_mt_day": max(0.0, installed_capacity_mt_day - required_capacity_mt_day),
+        "expansion_stage": expansion_stage,
+        "recommended_action": recommended_action,
+        "new_plant_required": "Yes" if new_plant_required else "No",
+        "recommended_new_plant_capacity_mt_day": recommended_new_plant_capacity_mt_day,
+        "existing_plant_expandable": "Yes" if expandable else "No",
+        "can_add_shift": "Yes" if can_add_shift else "No",
+        "can_add_line": "Yes" if can_add_line else "No",
+        "expansion_required": expansion_required,
     }
 
 
@@ -1369,9 +1473,15 @@ def build_financial_chain(product_mix=None, channel_mix=None, product_registry=N
         "total_planned_finished_goods_kg_day": channel_product_volume_output["total_planned_finished_goods_kg_day"],
         "total_planned_finished_goods_mt_day": channel_product_volume_output["total_planned_finished_goods_mt_day"],
     }
-    plant = build_plant_capacity_output(raw, plant_capacity_per_line_mt_day, working_hours_per_shift, max_shifts, cold_storage_buffer_days, utilization_threshold_pct)
+    plant = build_plant_capacity_output(
+        raw,
+        plant_capacity_per_line_mt_day,
+        working_hours_per_shift,
+        max_shifts,
+        cold_storage_buffer_days,
+        utilization_threshold_pct,
+    )
     manpower = build_manpower_output(raw, plant, channel_mix, operating_model, business_stage, stage_profile, revenue)
-    production_lines = plant["production_lines_required"]
     return {
         "revenue": revenue,
         "revenue_rupees": revenue,
@@ -1426,16 +1536,6 @@ def build_financial_chain(product_mix=None, channel_mix=None, product_registry=N
         "plant_capacity_output": plant,
         "manpower_output": manpower,
         "channel_product_volume_output": channel_product_volume_output,
-        "plant_capacity_output": {
-            **plant,
-            "finished_goods_mt_day": raw["finished_goods_mt_day"],
-            "plant_capacity_mt_day": 10.0,
-            "production_lines_required": production_lines,
-            "plant_utilization_pct": plant["plant_utilization_pct"],
-            "shifts_required": max(1, math.ceil(raw["finished_goods_mt_day"] / 10.0)),
-            "cold_storage_required_mt": raw["finished_goods_mt_day"] * 3,
-            "expansion_required": "Yes" if plant["plant_utilization_pct"] > 85 else "No",
-        },
     }
 
 
@@ -1450,7 +1550,32 @@ def build_plant_planning(plant=None, assigned_markets=None, product_mix=None, ch
                 break
     if assigned_revenue <= 0:
         assigned_revenue = _to_float((stage_profile or {}).get("revenue_rupees", 60000000.0) if isinstance(stage_profile, dict) else 60000000.0, 60000000.0)
-    result = build_financial_chain(product_mix, channel_mix, product_registry, channel_registry, pricing_registry, cost_registry, assigned_revenue, avg_bird_weight, working_days, stage_profile, live_bird_rate=live_bird_rate, yield_pct=yield_pct, plant_capacity_per_line_mt_day=plant_capacity_per_line_mt_day, working_hours_per_shift=working_hours_per_shift, max_shifts=max_shifts, cold_storage_buffer_days=cold_storage_buffer_days, utilization_threshold_pct=utilization_threshold_pct, operating_model=operating_model, business_stage=business_stage, procurement_drivers=procurement_drivers, mortality_pct=mortality_pct, processing_loss_pct=processing_loss_pct, gt_distributor_margin_pct=gt_distributor_margin_pct, packaging_cost_per_kg=packaging_cost_per_kg, transport_cost_per_kg=transport_cost_per_kg, trader_margin_pct=trader_margin_pct, farm_margin_pct=farm_margin_pct)
+    line_capacity_mt_day = _to_float((plant or {}).get("line_capacity_mt_day", plant_capacity_per_line_mt_day), plant_capacity_per_line_mt_day)
+    maximum_shifts_per_line = max(1, int(round(_to_float((plant or {}).get("maximum_shifts", max_shifts), max_shifts))))
+    installed_capacity_mt_day = _to_float((plant or {}).get("installed_capacity_mt_day", line_capacity_mt_day), line_capacity_mt_day)
+    configured_installed_lines = max(1, int(round(installed_capacity_mt_day / max(0.1, line_capacity_mt_day))))
+    configured_active_shifts = max(1, int(round(_to_float((plant or {}).get("active_shifts", 1), 1))))
+    max_lines_raw = (plant or {}).get("maximum_lines_in_current_plant", (plant or {}).get("max_lines_in_current_plant", None))
+    maximum_lines_in_current_plant = max(configured_installed_lines + 1, configured_installed_lines if max_lines_raw is None else int(round(_to_float(max_lines_raw, configured_installed_lines + 1))))
+    expandable_flag = str((plant or {}).get("existing_plant_expandable", "Yes")).strip().lower() not in {"no", "false", "0"}
+
+    result = build_financial_chain(product_mix, channel_mix, product_registry, channel_registry, pricing_registry, cost_registry, assigned_revenue, avg_bird_weight, working_days, stage_profile, live_bird_rate=live_bird_rate, yield_pct=yield_pct, plant_capacity_per_line_mt_day=line_capacity_mt_day, working_hours_per_shift=working_hours_per_shift, max_shifts=maximum_shifts_per_line, cold_storage_buffer_days=cold_storage_buffer_days, utilization_threshold_pct=utilization_threshold_pct, operating_model=operating_model, business_stage=business_stage, procurement_drivers=procurement_drivers, mortality_pct=mortality_pct, processing_loss_pct=processing_loss_pct, gt_distributor_margin_pct=gt_distributor_margin_pct, packaging_cost_per_kg=packaging_cost_per_kg, transport_cost_per_kg=transport_cost_per_kg, trader_margin_pct=trader_margin_pct, farm_margin_pct=farm_margin_pct)
+    result["plant_capacity_output"] = build_plant_capacity_output(
+        result.get("raw_material_output", {}),
+        capacity_per_line_mt_day=line_capacity_mt_day,
+        working_hours_per_shift=working_hours_per_shift,
+        max_shifts=maximum_shifts_per_line,
+        cold_storage_buffer_days=cold_storage_buffer_days,
+        utilization_threshold_pct=utilization_threshold_pct,
+        installed_lines=configured_installed_lines,
+        active_shifts=configured_active_shifts,
+        maximum_lines_in_current_plant=maximum_lines_in_current_plant,
+        safe_utilization_pct=85.0,
+        review_utilization_pct=90.0,
+        critical_utilization_pct=95.0,
+        existing_plant_expandable=expandable_flag,
+        expansion_line_increment=1,
+    )
     result["assigned_market_revenue"] = assigned_revenue
     return result
 

@@ -302,6 +302,48 @@ st.markdown("""
     color: #2d5b88;
     text-decoration: none;
 }
+.pbos-formula-table-wrap {
+    width: 100%;
+    overflow: visible;
+}
+.pbos-formula-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 0.8rem;
+    border: 1px solid #e6ebf2;
+    border-radius: 10px;
+    overflow: hidden;
+}
+.pbos-formula-table th,
+.pbos-formula-table td {
+    border-bottom: 1px solid #eef2f7;
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    height: auto;
+    line-height: 1.35;
+}
+.pbos-formula-table th {
+    background: #f8fafc;
+    color: #334155;
+    font-weight: 600;
+}
+.pbos-formula-table tbody tr:last-child td {
+    border-bottom: none;
+}
+.pbos-formula-table .pbos-formula-empty {
+    color: #94a3b8;
+}
+.pbos-formula-block {
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    line-height: 1.45;
+}
 @media (max-width: 900px) {
     .pbos-page-header {
         padding: 12px 14px;
@@ -432,6 +474,9 @@ st.markdown("""
     [data-testid="stHorizontalBlock"] > [data-testid="column"] {
         min-width: 100%;
         flex: 1 1 100%;
+    }
+    .pbos-formula-table {
+        font-size: 0.76rem;
     }
 }
 </style>
@@ -731,9 +776,78 @@ def build_formula_rows(section_key, current_value, unit, status, worked_calculat
     return rows
 
 
+def _format_formula_text(item, value):
+        text = "" if value is None else str(value)
+        escaped = escape(text)
+        if item == "Related KPIs":
+                parts = [escape(part.strip()) for part in text.split(",") if part.strip()]
+                return "<br>".join(parts)
+        if item in {"Formula", "Formula Expression", "Worked Calculation"}:
+                formatted = escaped.replace(" = ", "<br>=<br>")
+                formatted = formatted.replace(" + ", "<br>+<br>")
+                formatted = formatted.replace(" − ", "<br>−<br>")
+                formatted = formatted.replace(" × ", "<br>×<br>")
+                formatted = formatted.replace(" ÷ ", "<br>÷<br>")
+                formatted = formatted.replace(" → ", "<br>→<br>")
+                formatted = formatted.replace("\n", "<br>")
+                return formatted
+        return escaped.replace("\n", "<br>")
+
+
+def render_wrapped_formula_table(table_key, rows):
+        detail_items = {
+                "Formula",
+                "Formula Expression",
+                "Worked Calculation",
+                "Assumptions",
+                "Business Meaning",
+                "Related KPIs",
+        }
+        body_html = []
+        for row in rows:
+                item = str(row.get("Item", ""))
+                raw_value = row.get("Value", "")
+                formatted_value = _format_formula_text(item, raw_value)
+                metric_cell = escape(item)
+                if item in detail_items:
+                        value_cell = "<span class='pbos-formula-empty'>—</span>"
+                        description_cell = f"<div class='pbos-formula-block'>{formatted_value}</div>"
+                else:
+                        value_cell = f"<div class='pbos-formula-block'>{formatted_value}</div>"
+                        description_cell = "<span class='pbos-formula-empty'>—</span>"
+                body_html.append(
+                        f"<tr><td>{metric_cell}</td><td>{value_cell}</td><td>{description_cell}</td></tr>"
+                )
+
+        st.markdown(
+                f"""
+                <div class='pbos-formula-table-wrap' id='{escape(table_key)}'>
+                    <table class='pbos-formula-table'>
+                        <colgroup>
+                            <col style='width:25%;'>
+                            <col style='width:20%;'>
+                            <col style='width:55%;'>
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Value</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {''.join(body_html)}
+                        </tbody>
+                    </table>
+                </div>
+                """,
+                unsafe_allow_html=True,
+        )
+
+
 def render_formula_section(section_key, rows):
     st.markdown(f"**{FORMULA_METADATA[section_key]['label']}**")
-    render_display_dataframe(st, f"formula_{section_key}", pd.DataFrame(rows), hide_index=True, width="stretch")
+    render_wrapped_formula_table(f"formula_{section_key}", rows)
 
 
 def validate_required_keys(output, required_keys, context):
@@ -755,78 +869,79 @@ def utilization_status(utilization_pct):
     return "Expansion Planning"
 
 
+def _recommended_action_subtitle(output):
+    utilization_pct = float(output.get("plant_utilization_pct", 0.0) or 0.0)
+    can_add_shift = output.get("can_add_shift", "No")
+    can_add_line = output.get("can_add_line", "No")
+    existing_expandable = output.get("existing_plant_expandable", "No")
+    action = str(output.get("recommended_action", "Continue Current Configuration"))
+    if action == "Add Shift":
+        return f"Current utilization is {utilization_pct:,.1f}%. Additional shift headroom is available."
+    if action == "Add Production Line":
+        return f"Current utilization is {utilization_pct:,.1f}%. Max shifts already active; line headroom is available."
+    if action == "Expand Existing Plant":
+        return f"Current utilization is {utilization_pct:,.1f}%. Shifts and line slots are full; site expansion is feasible."
+    if action == "Build New Plant":
+        return "Current-site options are exhausted. Required capacity exceeds maximum current-site capacity."
+    if action == "Optimize Existing Capacity":
+        return f"Current utilization is {utilization_pct:,.1f}%. Optimize conversion and schedule before CAPEX."
+    return f"Current utilization is {utilization_pct:,.1f}%. Shift headroom: {can_add_shift}. Line headroom: {can_add_line}. Expandable: {existing_expandable}."
+
+
 def render_plant_drilldown(kpi_name):
-    finished_goods_day = plant_capacity_output["finished_goods_mt_day"]
-    capacity_per_line = plant_capacity_output["capacity_per_line_mt_day"]
-    installed_capacity = plant_capacity_output["installed_capacity_mt_day"]
-    lines_required = plant_capacity_output["production_lines_required"]
-    utilization_pct = plant_capacity_output["plant_utilization_pct"]
-    shifts_required = plant_capacity_output["shifts_required"]
-    cold_storage_required = plant_capacity_output["cold_storage_required_mt"]
-    buffer_days = plant_capacity_output["cold_storage_buffer_days"]
-    threshold_pct = plant_capacity_output["utilization_threshold_pct"]
-    unused_capacity = plant_capacity_output["unused_capacity_mt_day"]
-    expansion_required = plant_capacity_output["expansion_required"]
+    required_output = float(plant_capacity_output.get("required_capacity_mt_day", plant_capacity_output.get("finished_goods_mt_day", 0.0)) or 0.0)
+    base_capacity = float(plant_capacity_output.get("plant_base_capacity_mt_day", plant_capacity_output.get("capacity_per_line_mt_day", 0.0)) or 0.0)
+    installed_lines = int(round(float(plant_capacity_output.get("installed_lines", plant_capacity_output.get("production_lines_required", 1)) or 1)))
+    active_shifts = int(round(float(plant_capacity_output.get("active_shifts", plant_capacity_output.get("shifts_required", 1)) or 1)))
+    installed_capacity = float(plant_capacity_output.get("installed_capacity_mt_day", 0.0) or 0.0)
+    max_shifts = int(round(float(plant_capacity_output.get("maximum_shifts_per_line", plant_capacity_output.get("max_shifts", 3)) or 3)))
+    max_lines = int(round(float(plant_capacity_output.get("maximum_lines_in_current_plant", installed_lines) or installed_lines)))
+    max_site_capacity = float(plant_capacity_output.get("maximum_current_plant_capacity_mt_day", 0.0) or 0.0)
+    capacity_gap = float(plant_capacity_output.get("capacity_gap_mt_day", 0.0) or 0.0)
+    utilization_pct = float(plant_capacity_output.get("plant_utilization_pct", 0.0) or 0.0)
+    expansion_stage = str(plant_capacity_output.get("expansion_stage", "A. Existing capacity sufficient"))
+    recommended_action = str(plant_capacity_output.get("recommended_action", "Continue Current Configuration"))
+    new_plant_required = str(plant_capacity_output.get("new_plant_required", "No"))
+    recommended_new_plant_capacity = float(plant_capacity_output.get("recommended_new_plant_capacity_mt_day", 0.0) or 0.0)
 
-    if kpi_name == "Finished Goods / Day":
-        st.write(f"Current revenue demand converts into {finished_goods_day:,.1f} MT of finished goods per day.")
-        st.write("This is the manufacturing demand anchor for plant capacity, production line, shift, and cold storage decisions.")
-        st.write(f"At {capacity_per_line:,.1f} MT per line per day, the plant needs {lines_required:,.0f} production line(s) to serve this demand.")
-        return
+    st.write(f"{kpi_name} is derived from one governed configuration model.")
+    detail_rows = pd.DataFrame([
+        {"Metric": "Required Output", "Value": f"{required_output:,.1f} MT/day"},
+        {"Metric": "Base Capacity per Line per Shift", "Value": f"{base_capacity:,.1f} MT/day"},
+        {"Metric": "Installed Lines", "Value": f"{installed_lines:,.0f}"},
+        {"Metric": "Active Shifts", "Value": f"{active_shifts:,.0f}"},
+        {"Metric": "Current Installed Capacity", "Value": f"{installed_capacity:,.1f} MT/day"},
+        {"Metric": "Maximum Shifts per Line", "Value": f"{max_shifts:,.0f}"},
+        {"Metric": "Maximum Lines in Current Plant", "Value": f"{max_lines:,.0f}"},
+        {"Metric": "Maximum Current-Site Capacity", "Value": f"{max_site_capacity:,.1f} MT/day"},
+        {"Metric": "Capacity Gap / Surplus", "Value": f"{capacity_gap:+,.1f} MT/day"},
+        {"Metric": "Utilization", "Value": f"{utilization_pct:,.1f}%"},
+        {"Metric": "Current Expansion Stage", "Value": expansion_stage},
+        {"Metric": "Recommended Action", "Value": recommended_action},
+        {"Metric": "New Plant Required", "Value": new_plant_required},
+        {"Metric": "Recommended New Plant Capacity", "Value": f"{recommended_new_plant_capacity:,.1f} MT/day"},
+    ])
+    render_display_dataframe(st, "plant_capacity_governed_details", detail_rows, hide_index=True, width="stretch")
 
-    if kpi_name == "Installed Capacity / Day":
-        st.write(f"The current plan installs {installed_capacity:,.1f} MT/day of manufacturing capacity.")
-        st.write(f"That comes from {lines_required:,.0f} production line(s), each planned at {capacity_per_line:,.1f} MT/day.")
-        st.write(f"Demand uses {utilization_pct:,.1f}% of this capacity, leaving {unused_capacity:,.1f} MT/day as operating flexibility.")
-        return
+    st.markdown("**Formula**")
+    st.write("Installed Capacity = Base Capacity per Line per Shift x Installed Lines x Active Shifts")
+    st.write(f"Worked Calculation: {base_capacity:,.1f} x {installed_lines:,.0f} x {active_shifts:,.0f} = {installed_capacity:,.1f} MT/day")
+    st.write(f"Utilization % = {required_output:,.1f} / {installed_capacity:,.1f} x 100 = {utilization_pct:,.1f}%")
 
-    if kpi_name == "Production Lines":
-        st.write("Production Lines")
-        st.write("Why?")
-        st.write(f"The revenue target creates {finished_goods_day:,.1f} MT/day of finished goods demand.")
-        st.write(f"With each line planned at {capacity_per_line:,.1f} MT/day, the business needs {lines_required:,.0f} production line(s).")
-        st.write("Sensitivity")
-        st.write("If capacity per line increases, required lines decrease.")
-        st.write("If revenue doubles, finished goods demand rises and required lines increase.")
-        return
+    st.markdown("**Expansion Decision Hierarchy**")
+    hierarchy_rows = pd.DataFrame([
+        {"Order": "A", "Decision Level": "Existing capacity sufficient", "Active": "Yes" if expansion_stage.startswith("A") else "No"},
+        {"Order": "B", "Decision Level": "Increase utilization within safe threshold", "Active": "Yes" if expansion_stage.startswith("B") else "No"},
+        {"Order": "C", "Decision Level": "Add shift", "Active": "Yes" if expansion_stage.startswith("C") else "No"},
+        {"Order": "D", "Decision Level": "Add production line", "Active": "Yes" if expansion_stage.startswith("D") else "No"},
+        {"Order": "E", "Decision Level": "Expand existing plant", "Active": "Yes" if expansion_stage.startswith("E") else "No"},
+        {"Order": "F", "Decision Level": "Build new plant", "Active": "Yes" if expansion_stage.startswith("F") else "No"},
+    ])
+    render_display_dataframe(st, "plant_capacity_hierarchy", hierarchy_rows, hide_index=True, width="stretch")
 
-    if kpi_name == "Shift Requirement":
-        st.write(f"Current demand requires {shifts_required:,.0f} shift(s) within a maximum operating envelope of {plant_capacity_output['max_shifts']:,.0f} shift(s).")
-        st.write(f"Each shift is planned at {plant_capacity_output['working_hours_per_shift']:,.0f} working hours.")
-        st.write("Higher utilization pushes the plant toward more shifts before new lines are added.")
-        return
-
-    if kpi_name == "Plant Utilization %":
-        st.write(f"Installed Capacity: {installed_capacity:,.1f} MT/day")
-        st.write(f"Finished Goods Demand: {finished_goods_day:,.1f} MT/day")
-        st.write(f"Unused Capacity: {unused_capacity:,.1f} MT/day")
-        st.write("Business Interpretation")
-        st.write("Green: below 70% utilization.")
-        st.write("Healthy: 70-85% utilization.")
-        st.write("Expansion Planning: above 85% utilization.")
-        st.write(f"Current status: {utilization_status(utilization_pct)}.")
-        return
-
-    if kpi_name == "Cold Storage Required":
-        st.write(f"Finished Goods: {finished_goods_day:,.1f} MT/day")
-        st.write(f"Buffer Days: {buffer_days:,.1f}")
-        st.write(f"Storage Needed: {cold_storage_required:,.1f} MT")
-        st.write("Business Meaning")
-        st.write("A 3-day inventory buffer protects supply continuity.")
-        return
-
-    if kpi_name == "Expansion Required":
-        st.write(f"Current Utilization: {utilization_pct:,.1f}%")
-        st.write(f"Threshold: {threshold_pct:,.1f}%")
-        st.write(f"Expansion Required: {expansion_required}")
-        if expansion_required == "Yes":
-            st.write("Recommended Action")
-            st.write("Crossing the threshold means maintenance flexibility reduces and expansion planning should begin.")
-            st.write("Examples")
-            st.write("Add shift. Add line. Expand plant.")
-        else:
-            st.write("Recommended Action")
-            st.write("Continue monitoring utilization before committing expansion capital.")
+    st.markdown("**Recommended Capacity Action**")
+    st.write(recommended_action)
+    st.write(_recommended_action_subtitle(plant_capacity_output))
 
 
 def show_plant_drilldown(kpi_name):
@@ -911,13 +1026,13 @@ KPI_ICONS = {
 }
 
 PLANT_ICON_KEYS = {
-    "Finished Goods / Day": "finished_goods_day",
-    "Installed Capacity / Day": "installed_capacity_day",
-    "Production Lines": "production_lines",
-    "Shift Requirement": "shift_requirement",
-    "Plant Utilization %": "plant_utilization",
-    "Cold Storage Required": "cold_storage",
-    "Expansion Required": "expansion_required",
+    "Required Output": "finished_goods_day",
+    "Current Plant Configuration": "production_lines",
+    "Current Installed Capacity": "installed_capacity_day",
+    "Maximum Current-Site Capacity": "corporate_capacity",
+    "Plant Utilization": "plant_utilization",
+    "Recommended Capacity Action": "expansion_required",
+    "New Plant Required": "expansion_required",
 }
 
 MANPOWER_ICON_KEYS = {
@@ -3221,20 +3336,30 @@ st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-title'>Plant Capacity Planning</div>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-subtitle'>Capacity required by the plant to support assigned market demand.</div>", unsafe_allow_html=True)
 colp1, colp2, colp3, colp4, colp5, colp6, colp7 = st.columns(7)
+required_output_mt_day = float(plant_capacity_output.get("required_capacity_mt_day", plant_capacity_output.get("finished_goods_mt_day", 0.0)) or 0.0)
+installed_lines = int(round(float(plant_capacity_output.get("installed_lines", plant_capacity_output.get("production_lines_required", 1)) or 1)))
+active_shifts = int(round(float(plant_capacity_output.get("active_shifts", plant_capacity_output.get("shifts_required", 1)) or 1)))
+base_capacity = float(plant_capacity_output.get("plant_base_capacity_mt_day", plant_capacity_output.get("capacity_per_line_mt_day", 0.0)) or 0.0)
+installed_capacity_mt_day = float(plant_capacity_output.get("installed_capacity_mt_day", 0.0) or 0.0)
+max_capacity_mt_day = float(plant_capacity_output.get("maximum_current_plant_capacity_mt_day", installed_capacity_mt_day) or installed_capacity_mt_day)
+utilization_pct = float(plant_capacity_output.get("plant_utilization_pct", 0.0) or 0.0)
+recommended_action = str(plant_capacity_output.get("recommended_action", "Continue Current Configuration"))
+new_plant_required = str(plant_capacity_output.get("new_plant_required", "No"))
+action_subtitle = _recommended_action_subtitle(plant_capacity_output)
 with colp1:
-    plant_kpi_card("Finished Goods / Day", f"{plant_capacity_output['finished_goods_mt_day']:,.1f} MT/day", "plant_kpi_finished_goods", subtitle="Demand output", status=None)
+    plant_kpi_card("Required Output", f"{required_output_mt_day:,.1f} MT/day", "plant_kpi_required_output", subtitle="Demand output")
 with colp2:
-    plant_kpi_card("Installed Capacity / Day", f"{plant_capacity_output['installed_capacity_mt_day']:,.1f} MT/day", "plant_kpi_installed_capacity", subtitle="Current installed capacity")
+    plant_kpi_card("Current Plant Configuration", f"{installed_lines:,.0f} lines x {active_shifts:,.0f} shifts", "plant_kpi_current_configuration", subtitle=f"{base_capacity:,.1f} MT/day per line per shift")
 with colp3:
-    plant_kpi_card("Production Lines", f"{plant_capacity_output['production_lines_required']:,.0f}", "plant_kpi_lines", subtitle="Required lines")
+    plant_kpi_card("Current Installed Capacity", f"{installed_capacity_mt_day:,.1f} MT/day", "plant_kpi_installed_capacity", subtitle="Base x lines x shifts")
 with colp4:
-    plant_kpi_card("Shift Requirement", f"{plant_capacity_output['shifts_required']:,.0f}", "plant_kpi_shifts", subtitle="Operating shifts")
+    plant_kpi_card("Maximum Current-Site Capacity", f"{max_capacity_mt_day:,.1f} MT/day", "plant_kpi_max_site_capacity", subtitle="Within current-site governance")
 with colp5:
-    plant_kpi_card("Plant Utilization %", f"{plant_capacity_output['plant_utilization_pct']:,.1f}%", "plant_kpi_utilization", subtitle="Capacity load", status="Available Capacity" if plant_capacity_output['plant_utilization_pct'] < 70 else "Healthy" if plant_capacity_output['plant_utilization_pct'] <= 85 else "Expansion Review" if plant_capacity_output['plant_utilization_pct'] <= 100 else "Over Capacity", status_type="pbos-status-positive" if plant_capacity_output['plant_utilization_pct'] < 70 else "pbos-status-warn" if plant_capacity_output['plant_utilization_pct'] <= 85 else "pbos-status-alert")
+    plant_kpi_card("Plant Utilization", f"{utilization_pct:,.1f}%", "plant_kpi_utilization", subtitle="Required output vs installed capacity", status="Normal" if utilization_pct <= 85 else "Monitor" if utilization_pct <= 90 else "Expansion Review" if utilization_pct <= 95 else "Critical" if utilization_pct <= 100 else "Capacity Deficit", status_type="pbos-status-positive" if utilization_pct <= 85 else "pbos-status-warn" if utilization_pct <= 95 else "pbos-status-alert")
 with colp6:
-    plant_kpi_card("Cold Storage Required", f"{plant_capacity_output['cold_storage_required_mt']:,.1f} MT", "plant_kpi_cold_storage", subtitle="Buffer stock requirement")
+    plant_kpi_card("Recommended Capacity Action", recommended_action, "plant_kpi_recommended_action", subtitle=action_subtitle, status=recommended_action, status_type="pbos-status-warn" if recommended_action in {"Add Shift", "Add Production Line", "Expand Existing Plant"} else "pbos-status-alert" if recommended_action == "Build New Plant" else "pbos-status-positive")
 with colp7:
-    plant_kpi_card("Expansion Required", plant_capacity_output["expansion_required"], "plant_kpi_expansion", subtitle="Capex signal", status=plant_capacity_output["expansion_required"], status_type="pbos-status-alert" if plant_capacity_output["expansion_required"] == "Yes" else "pbos-status-neutral")
+    plant_kpi_card("New Plant Required", new_plant_required, "plant_kpi_new_plant_required", subtitle=f"Recommended new capacity: {float(plant_capacity_output.get('recommended_new_plant_capacity_mt_day', 0.0) or 0.0):,.1f} MT/day", status=new_plant_required, status_type="pbos-status-alert" if new_plant_required == "Yes" else "pbos-status-positive")
 st.markdown("</div>", unsafe_allow_html=True)
 log_section_end("Plant Capacity Planning")
 
