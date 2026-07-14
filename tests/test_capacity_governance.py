@@ -2,10 +2,69 @@ import unittest
 
 import pandas as pd
 
-from calculation_engine import build_plant_capacity_output, build_plant_planning
+from calculation_engine import build_plant_capacity_output, build_plant_planning, format_configuration
 
 
 class CapacityGovernanceTests(unittest.TestCase):
+    def test_recommended_config_a_9_4_mt_day(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 9.4},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+        )
+        self.assertEqual(output["recommended_configuration_label"], "1 line × 1 shift")
+        self.assertAlmostEqual(output["recommended_capacity_mt_day"], 10.0, places=3)
+
+    def test_recommended_config_b_15_mt_day(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 15.0},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+        )
+        self.assertEqual(output["recommended_configuration_label"], "1 line × 2 shifts")
+        self.assertAlmostEqual(output["recommended_capacity_mt_day"], 20.0, places=3)
+
+    def test_recommended_config_c_39_1_mt_day(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 39.1},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+            existing_plant_expandable=True,
+        )
+        self.assertEqual(output["recommended_lines"], 2)
+        self.assertEqual(output["recommended_shifts"], 2)
+        self.assertEqual(output["recommended_configuration_label"], "2 lines × 2 shifts")
+        self.assertAlmostEqual(output["recommended_capacity_mt_day"], 40.0, places=3)
+        self.assertAlmostEqual(output["projected_utilization_pct"], 97.75, places=2)
+        self.assertEqual(output["new_plant_required"], "No")
+
+    def test_recommended_capacity_math_d_10_x_2_x_2(self):
+        self.assertAlmostEqual(10.0 * 2 * 2, 40.0, places=9)
+
+    def test_recommended_label_uses_canonical_formatter(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 39.1},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+            existing_plant_expandable=True,
+        )
+        self.assertEqual(
+            output["recommended_configuration_label"],
+            format_configuration(output["recommended_lines"], output["recommended_shifts"]),
+        )
+
     def test_a_base_10_one_line_one_shift_capacity_10(self):
         output = build_plant_capacity_output(
             {"finished_goods_mt_day": 5.0},

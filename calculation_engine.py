@@ -39,12 +39,16 @@ def _normalize_mapping(value):
     return {}
 
 
-def _configuration_label(lines, shifts):
+def format_configuration(lines: int, shifts: int) -> str:
     lines_int = max(1, int(round(_to_float(lines, 1.0))))
     shifts_int = max(1, int(round(_to_float(shifts, 1.0))))
     line_word = "line" if lines_int == 1 else "lines"
     shift_word = "shift" if shifts_int == 1 else "shifts"
     return f"{lines_int} {line_word} × {shifts_int} {shift_word}"
+
+
+def _configuration_label(lines, shifts):
+    return format_configuration(lines, shifts)
 
 
 def _coerce_percent(value):
@@ -367,7 +371,7 @@ def build_plant_capacity_output(
 
     current_installed_lines = best_lines
     current_active_shifts = best_shifts
-    current_configuration_label = _configuration_label(current_installed_lines, current_active_shifts)
+    current_configuration_label = format_configuration(current_installed_lines, current_active_shifts)
     current_installed_capacity_mt_day = plant_base_capacity_mt_day * current_installed_lines * current_active_shifts
     installed_capacity_mt_day = current_installed_capacity_mt_day
     maximum_current_plant_capacity_mt_day = plant_base_capacity_mt_day * maximum_lines_in_current_plant * maximum_shifts_per_line
@@ -402,7 +406,7 @@ def build_plant_capacity_output(
         if recommended_pair is not None:
             _, recommended_lines, recommended_shifts = recommended_pair
     recommended_capacity_mt_day = plant_base_capacity_mt_day * recommended_lines * recommended_shifts
-    recommended_configuration_label = _configuration_label(recommended_lines, recommended_shifts)
+    recommended_configuration_label = format_configuration(recommended_lines, recommended_shifts)
     projected_utilization_pct = required_capacity_mt_day / recommended_capacity_mt_day * 100.0 if recommended_capacity_mt_day > 0 else 0.0
     remaining_shift_capacity_mt_day = max(0.0, shift_only_capacity_mt_day - installed_capacity_mt_day)
     remaining_line_capacity_mt_day = max(0.0, line_only_capacity_mt_day - installed_capacity_mt_day)

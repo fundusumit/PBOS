@@ -869,6 +869,12 @@ def utilization_status(utilization_pct):
     return "Expansion Planning"
 
 
+def format_configuration(lines: int, shifts: int) -> str:
+    line_word = "line" if lines == 1 else "lines"
+    shift_word = "shift" if shifts == 1 else "shifts"
+    return f"{lines} {line_word} × {shifts} {shift_word}"
+
+
 def _recommended_action_subtitle(output):
     action = str(output.get("recommended_action", "Continue Current Configuration"))
     decision_reason = str(output.get("decision_reason", ""))
@@ -891,10 +897,12 @@ def render_plant_capacity_governance_dialog():
     capacity_headroom = float(plant_capacity_output.get("capacity_headroom_mt_day", 0.0) or 0.0)
     current_load_ratio = float(plant_capacity_output.get("current_load_ratio_pct", plant_capacity_output.get("plant_utilization_pct", 0.0)) or 0.0)
     projected_utilization = float(plant_capacity_output.get("projected_utilization_pct", 0.0) or 0.0)
-    recommended_lines = int(round(float(plant_capacity_output.get("recommended_lines", installed_lines) or installed_lines)))
-    recommended_shifts = int(round(float(plant_capacity_output.get("recommended_shifts", active_shifts) or active_shifts)))
+    recommended_lines = int(round(float(plant_capacity_output.get("recommended_lines", 1) or 1)))
+    recommended_shifts = int(round(float(plant_capacity_output.get("recommended_shifts", 1) or 1)))
     recommended_capacity = float(plant_capacity_output.get("recommended_capacity_mt_day", installed_capacity) or installed_capacity)
-    recommended_configuration_label = str(plant_capacity_output.get("recommended_configuration_label", f"{recommended_lines:,.0f} {'line' if recommended_lines == 1 else 'lines'} × {recommended_shifts:,.0f} {'shift' if recommended_shifts == 1 else 'shifts'}"))
+    recommended_configuration_label = str(plant_capacity_output.get("recommended_configuration_label", "")).strip()
+    if not recommended_configuration_label:
+        recommended_configuration_label = format_configuration(recommended_lines, recommended_shifts)
     remaining_shift_capacity = float(plant_capacity_output.get("remaining_shift_capacity_mt_day", 0.0) or 0.0)
     remaining_line_capacity = float(plant_capacity_output.get("remaining_line_capacity_mt_day", 0.0) or 0.0)
     remaining_site_capacity = float(plant_capacity_output.get("remaining_current_site_capacity_mt_day", 0.0) or 0.0)
@@ -3410,10 +3418,30 @@ required_output_mt_day = float(plant_capacity_output.get("required_capacity_mt_d
 installed_lines = int(round(float(plant_capacity_output.get("current_installed_lines", plant_capacity_output.get("installed_lines", plant_capacity_output.get("production_lines_required", 1))) or 1)))
 active_shifts = int(round(float(plant_capacity_output.get("current_active_shifts", plant_capacity_output.get("active_shifts", plant_capacity_output.get("shifts_required", 1))) or 1)))
 current_configuration_label = str(plant_capacity_output.get("current_configuration_label", f"{installed_lines:,.0f} {'line' if installed_lines == 1 else 'lines'} × {active_shifts:,.0f} {'shift' if active_shifts == 1 else 'shifts'}"))
-recommended_configuration_label = str(plant_capacity_output.get("recommended_configuration_label", current_configuration_label))
+recommended_lines = int(round(float(plant_capacity_output.get("recommended_lines", 1) or 1)))
+recommended_shifts = int(round(float(plant_capacity_output.get("recommended_shifts", 1) or 1)))
+recommended_configuration_label = str(plant_capacity_output.get("recommended_configuration_label", "")).strip()
+if not recommended_configuration_label:
+    recommended_configuration_label = format_configuration(recommended_lines, recommended_shifts)
 base_capacity = float(plant_capacity_output.get("plant_base_capacity_mt_day", plant_capacity_output.get("capacity_per_line_mt_day", 0.0)) or 0.0)
 installed_capacity_mt_day = float(plant_capacity_output.get("current_installed_capacity_mt_day", plant_capacity_output.get("installed_capacity_mt_day", 0.0)) or 0.0)
 recommended_capacity_mt_day = float(plant_capacity_output.get("recommended_capacity_mt_day", installed_capacity_mt_day) or installed_capacity_mt_day)
+expected_recommended_capacity_mt_day = base_capacity * recommended_lines * recommended_shifts
+capacity_consistency_tolerance = 1e-6
+recommended_configuration_display_value = recommended_configuration_label
+recommended_configuration_subtitle = f"{recommended_capacity_mt_day:,.1f} MT/day recommended capacity"
+if abs(expected_recommended_capacity_mt_day - recommended_capacity_mt_day) > capacity_consistency_tolerance:
+    log_runtime_event(
+        "plant_configuration_reconciliation_mismatch",
+        expected_capacity_mt_day=f"{expected_recommended_capacity_mt_day:.4f}",
+        reported_recommended_capacity_mt_day=f"{recommended_capacity_mt_day:.4f}",
+        recommended_lines=recommended_lines,
+        recommended_shifts=recommended_shifts,
+        recommended_configuration_label=recommended_configuration_label,
+    )
+    recommended_configuration_display_value = "Configuration Review Required"
+    recommended_configuration_subtitle = f"Expected {expected_recommended_capacity_mt_day:,.1f} MT/day from {format_configuration(recommended_lines, recommended_shifts)}"
+    st.warning("Configuration Review Required")
 max_capacity_mt_day = float(plant_capacity_output.get("maximum_current_plant_capacity_mt_day", installed_capacity_mt_day) or installed_capacity_mt_day)
 current_load_ratio_pct = float(plant_capacity_output.get("current_load_ratio_pct", plant_capacity_output.get("plant_utilization_pct", 0.0)) or 0.0)
 recommended_action = str(plant_capacity_output.get("recommended_action", "Continue Current Configuration"))
@@ -3425,7 +3453,7 @@ with colp1:
 with colp2:
     plant_kpi_card("Current Installed Capacity", f"{installed_capacity_mt_day:,.1f} MT/day", "plant_kpi_installed_capacity", subtitle="Base x lines x shifts")
 with colp3:
-    plant_kpi_card("Recommended Plant Configuration", recommended_configuration_label, "plant_kpi_recommended_configuration", subtitle=f"{recommended_capacity_mt_day:,.1f} MT/day recommended capacity")
+    plant_kpi_card("Recommended Plant Configuration", recommended_configuration_display_value, "plant_kpi_recommended_configuration", subtitle=recommended_configuration_subtitle)
 with colp4:
     plant_kpi_card("Maximum Current-Site Capacity", f"{max_capacity_mt_day:,.1f} MT/day", "plant_kpi_max_site_capacity", subtitle="Within current-site governance")
 
