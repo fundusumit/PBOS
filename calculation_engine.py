@@ -1640,78 +1640,94 @@ def build_channel_sales_output(
                 return value
         return bands[-1][1]
 
+    def _resolve_workload(explicit_value, derived_value):
+        if explicit_value is None:
+            return int(max(0, derived_value)), False
+        return int(max(0, _to_float(explicit_value, derived_value))), True
+
     def _derived_gt_outlets(total_revenue):
         if total_revenue <= 0:
             return 0
         return int(_band_value(total_revenue, [
-            (40000000.0, 400),
-            (80000000.0, 500),
-            (150000000.0, 650),
-            (250000000.0, 850),
-            (float("inf"), 1000),
+            (10000000.0, 120),
+            (20000000.0, 180),
+            (40000000.0, 260),
+            (100000000.0, 400),
+            (250000000.0, 650),
+            (float("inf"), 900),
         ]))
 
     def _derived_distributors(outlets):
         if outlets <= 0:
             return 0
-        if outlets <= 400:
-            return 6
-        if outlets <= 600:
-            return 8
-        if outlets <= 800:
-            return 10
-        return int(math.ceil(outlets / 85.0))
+        return int(_band_value(outlets, [
+            (120, 2),
+            (250, 4),
+            (400, 6),
+            (650, 8),
+            (float("inf"), int(math.ceil(outlets / 80.0))),
+        ]))
 
     def _derived_mt_accounts(mt_scale_revenue):
         if mt_scale_revenue <= 0:
             return 0
         return int(_band_value(mt_scale_revenue, [
-            (6000000.0, 5),
-            (12000000.0, 8),
-            (25000000.0, 12),
-            (50000000.0, 16),
-            (float("inf"), 20),
+            (2500000.0, 1),
+            (8000000.0, 2),
+            (15000000.0, 4),
+            (30000000.0, 7),
+            (float("inf"), 12),
         ]))
 
     def _derived_qcom_accounts(qcom_scale_revenue):
         if qcom_scale_revenue <= 0:
             return 0
         return int(_band_value(qcom_scale_revenue, [
-            (3000000.0, 2),
-            (8000000.0, 3),
-            (15000000.0, 5),
-            (30000000.0, 8),
-            (float("inf"), 12),
+            (2000000.0, 1),
+            (6000000.0, 2),
+            (12000000.0, 3),
+            (24000000.0, 5),
+            (float("inf"), 8),
+        ]))
+
+    def _derived_ecommerce_accounts(ecommerce_scale_revenue):
+        if ecommerce_scale_revenue <= 0:
+            return 0
+        return int(_band_value(ecommerce_scale_revenue, [
+            (3000000.0, 1),
+            (8000000.0, 2),
+            (20000000.0, 3),
+            (float("inf"), 5),
         ]))
 
     def _derived_horeca_accounts(horeca_scale_revenue):
         if horeca_scale_revenue <= 0:
             return 0
         return int(_band_value(horeca_scale_revenue, [
-            (10000000.0, 10),
-            (25000000.0, 14),
-            (40000000.0, 18),
-            (float("inf"), 24),
+            (6000000.0, 4),
+            (15000000.0, 7),
+            (30000000.0, 10),
+            (float("inf"), 16),
         ]))
 
     def _derived_institution_tenders(inst_scale_revenue):
         if inst_scale_revenue <= 0:
             return 0
         return int(_band_value(inst_scale_revenue, [
-            (8000000.0, 1),
-            (20000000.0, 2),
-            (40000000.0, 4),
-            (float("inf"), 6),
+            (8000000.0, 0),
+            (20000000.0, 1),
+            (40000000.0, 2),
+            (float("inf"), 4),
         ]))
 
     def _derived_exports_markets(exports_scale_revenue):
         if exports_scale_revenue <= 0:
             return 0
         return int(_band_value(exports_scale_revenue, [
-            (5000000.0, 1),
-            (15000000.0, 2),
-            (30000000.0, 3),
-            (float("inf"), 4),
+            (15000000.0, 0),
+            (50000000.0, 1),
+            (120000000.0, 2),
+            (float("inf"), 3),
         ]))
 
     gt_revenue_capacity_per_distributor = (
@@ -1722,65 +1738,133 @@ def build_channel_sales_output(
 
     outlets_per_exec_base = max(1.0, _to_float(gt_outlets_per_sales_executive, 120.0))
     outlets_per_exec_effective = max(1.0, outlets_per_exec_base * effective_capacity_multiplier)
-    derived_gt_outlets = _derived_gt_outlets(revenue)
-    gt_outlets = int(_to_float(gt_target_outlets, derived_gt_outlets)) if gt_target_outlets is not None else int(derived_gt_outlets)
+    derived_gt_outlets = _derived_gt_outlets(gt_revenue)
+    gt_outlets, gt_outlets_explicit = _resolve_workload(gt_target_outlets, derived_gt_outlets)
     required_distributors = _derived_distributors(gt_outlets)
-    gt_distributors_planned = int(_to_float(gt_distributors, required_distributors)) if gt_distributors is not None else int(required_distributors)
+    gt_distributors_planned, gt_distributors_explicit = _resolve_workload(gt_distributors, required_distributors)
 
     distributors_per_manager_base = max(1.0, _to_float(distributors_per_manager, 8.0))
     distributors_per_manager_effective = max(1.0, distributors_per_manager_base * effective_capacity_multiplier)
+    governed_head_span = max(2, int(round(6 * effective_capacity_multiplier)))
     gt_sales_executives = 0 if gt_outlets <= 0 else int(math.ceil(gt_outlets / outlets_per_exec_effective))
-    gt_distributor_managers = 0 if gt_distributors_planned <= 0 else int(math.ceil(gt_distributors_planned / distributors_per_manager_effective))
-    gt_hc = gt_sales_executives + gt_distributor_managers
+    if gt_distributors_planned <= governed_head_span:
+        gt_distributor_managers = 0
+    else:
+        gt_distributor_managers = int(math.ceil((gt_distributors_planned - governed_head_span) / distributors_per_manager_effective))
+    gt_hc = gt_sales_executives
 
     mt_accounts_base = max(1.0, _to_float(mt_accounts_per_kam, 4.0))
     mt_accounts_effective = max(1.0, mt_accounts_base * effective_capacity_multiplier)
     derived_mt_accounts = _derived_mt_accounts(mt_revenue)
-    mt_accounts = int(_to_float(mt_active_accounts, derived_mt_accounts)) if mt_active_accounts is not None else int(derived_mt_accounts)
-    mt_hc = 0 if mt_accounts <= 0 else int(math.ceil(mt_accounts / mt_accounts_effective))
+    mt_accounts, mt_accounts_explicit = _resolve_workload(mt_active_accounts, derived_mt_accounts)
 
     qcom_accounts_base = max(1.0, _to_float(qcom_accounts_per_kam, 3.0))
     qcom_accounts_effective = max(1.0, qcom_accounts_base * effective_capacity_multiplier)
     derived_qcom_accounts = _derived_qcom_accounts(qcom_revenue)
-    qcom_buying_accounts = int(_to_float(qcom_buying_accounts, derived_qcom_accounts)) if qcom_buying_accounts is not None else int(derived_qcom_accounts)
+    qcom_buying_accounts, qcom_accounts_explicit = _resolve_workload(qcom_buying_accounts, derived_qcom_accounts)
     derived_qcom_regions = 0 if qcom_buying_accounts <= 0 else max(1, int(math.ceil(qcom_buying_accounts / 2.0)))
-    qcom_buying_regions = int(_to_float(qcom_buying_regions, derived_qcom_regions)) if qcom_buying_regions is not None else int(derived_qcom_regions)
+    qcom_buying_regions, qcom_regions_explicit = _resolve_workload(qcom_buying_regions, derived_qcom_regions)
     qcom_dark_stores = 0 if qcom_revenue <= 0 else qcom_buying_regions * 12
     qcom_weighted_workload = qcom_buying_accounts + 0.5 * qcom_buying_regions + 0.05 * qcom_dark_stores
-    qcom_hc = 0 if qcom_weighted_workload <= 0 else int(math.ceil(qcom_weighted_workload / qcom_accounts_effective))
 
     ecommerce_accounts_base = max(1.0, _to_float(ecommerce_accounts_per_manager, 4.0))
     ecommerce_accounts_effective = max(1.0, ecommerce_accounts_base * effective_capacity_multiplier)
-    derived_ecommerce_accounts = 0 if ecommerce_revenue <= 0 else max(1, int(math.ceil(ecommerce_revenue / 8000000.0)))
-    ecommerce_accounts = int(_to_float(ecommerce_active_accounts, derived_ecommerce_accounts)) if ecommerce_active_accounts is not None else int(derived_ecommerce_accounts)
-    ecommerce_hc = 0 if ecommerce_accounts <= 0 else int(math.ceil(ecommerce_accounts / ecommerce_accounts_effective))
+    derived_ecommerce_accounts = _derived_ecommerce_accounts(ecommerce_revenue)
+    ecommerce_accounts, ecommerce_accounts_explicit = _resolve_workload(ecommerce_active_accounts, derived_ecommerce_accounts)
 
     horeca_accounts_base = max(1.0, _to_float(horeca_accounts_per_manager, 4.0))
     horeca_accounts_effective = max(1.0, horeca_accounts_base * effective_capacity_multiplier)
     derived_horeca_accounts = _derived_horeca_accounts(horeca_revenue)
-    horeca_accounts = int(_to_float(horeca_active_accounts, derived_horeca_accounts)) if horeca_active_accounts else int(derived_horeca_accounts)
-    horeca_hc = 0 if horeca_accounts <= 0 else int(math.ceil(horeca_accounts / horeca_accounts_effective))
+    horeca_accounts, horeca_accounts_explicit = _resolve_workload(horeca_active_accounts, derived_horeca_accounts)
 
     institutional_tenders_base = max(1.0, _to_float(institutional_tenders_per_manager, 4.0))
     institutional_tenders_effective = max(1.0, institutional_tenders_base * effective_capacity_multiplier)
     derived_institution_tenders = _derived_institution_tenders(inst_revenue)
-    institution_tenders = int(_to_float(institutional_active_tenders, derived_institution_tenders)) if institutional_active_tenders is not None else int(derived_institution_tenders)
-    inst_hc = 0 if institution_tenders <= 0 else int(math.ceil(institution_tenders / institutional_tenders_effective))
+    institution_tenders, institution_tenders_explicit = _resolve_workload(institutional_active_tenders, derived_institution_tenders)
 
     exports_buyers_base = max(1.0, _to_float(exports_buyers_per_manager, 3.0))
     exports_buyers_effective = max(1.0, exports_buyers_base * effective_capacity_multiplier)
     derived_exports_markets = _derived_exports_markets(exports_revenue)
-    exports_markets = int(_to_float(exports_active_markets, derived_exports_markets)) if exports_active_markets is not None else int(derived_exports_markets)
+    exports_markets, exports_markets_explicit = _resolve_workload(exports_active_markets, derived_exports_markets)
     derived_exports_buyers = 0 if exports_markets <= 0 else max(1, exports_markets * 2)
-    exports_buyers = int(_to_float(exports_active_buyers, derived_exports_buyers)) if exports_active_buyers is not None else int(derived_exports_buyers)
+    exports_buyers, exports_buyers_explicit = _resolve_workload(exports_active_buyers, derived_exports_buyers)
     exports_weighted_workload = exports_buyers + 0.5 * exports_markets
-    exports_hc = 0 if exports_weighted_workload <= 0 else int(math.ceil(exports_weighted_workload / exports_buyers_effective))
 
-    frontline_hc = gt_sales_executives + mt_hc + qcom_hc + ecommerce_hc + horeca_hc + inst_hc + exports_hc
+    qcom_complexity_weight = 1.5
+    ecommerce_complexity_weight = 1.2
+    institutional_complexity_weight = 1.4
+
+    weighted_digital_accounts = mt_accounts + qcom_buying_accounts * qcom_complexity_weight + ecommerce_accounts * ecommerce_complexity_weight
+    digital_accounts_capacity_base = max(1.0, (mt_accounts_base + qcom_accounts_base + ecommerce_accounts_base) / 3.0)
+    digital_accounts_capacity_effective = max(1.0, digital_accounts_capacity_base * effective_capacity_multiplier)
+    digital_shared_threshold = digital_accounts_capacity_effective * 2.0
+    digital_specialist_threshold = digital_accounts_capacity_effective * 3.0
+    mt_hc = 0
+    qcom_hc = 0
+    ecommerce_hc = 0
+    shared_digital_hc = 0
+    if weighted_digital_accounts > 0:
+        if weighted_digital_accounts <= digital_shared_threshold:
+            shared_digital_hc = int(math.ceil(weighted_digital_accounts / digital_accounts_capacity_effective))
+        else:
+            residual_digital_workload = weighted_digital_accounts
+            if mt_accounts > 0 and weighted_digital_accounts > digital_accounts_capacity_effective * 1.60:
+                mt_hc = int(math.ceil(mt_accounts / mt_accounts_effective))
+                residual_digital_workload -= mt_accounts
+            if qcom_buying_accounts > 0 and weighted_digital_accounts > digital_accounts_capacity_effective * 2.20:
+                qcom_hc = int(math.ceil(qcom_weighted_workload / qcom_accounts_effective))
+                residual_digital_workload -= qcom_buying_accounts * qcom_complexity_weight
+            if ecommerce_accounts > 0 and weighted_digital_accounts > digital_specialist_threshold:
+                ecommerce_hc = int(math.ceil(ecommerce_accounts / ecommerce_accounts_effective))
+                residual_digital_workload -= ecommerce_accounts * ecommerce_complexity_weight
+            shared_digital_hc = int(math.ceil(max(0.0, residual_digital_workload) / digital_accounts_capacity_effective)) if residual_digital_workload > 0 else 0
+
+    weighted_b2b_workload = horeca_accounts + institution_tenders * institutional_complexity_weight
+    b2b_capacity_base = max(1.0, (horeca_accounts_base + institutional_tenders_base) / 2.0)
+    b2b_capacity_effective = max(1.0, b2b_capacity_base * effective_capacity_multiplier)
+    b2b_shared_threshold = b2b_capacity_effective * 2.0
+    b2b_specialist_threshold = b2b_capacity_effective * 2.60
+    horeca_hc = 0
+    inst_hc = 0
+    shared_b2b_hc = 0
+    if weighted_b2b_workload > 0:
+        if weighted_b2b_workload <= b2b_shared_threshold:
+            shared_b2b_hc = int(math.ceil(weighted_b2b_workload / b2b_capacity_effective))
+        else:
+            residual_b2b_workload = weighted_b2b_workload
+            if horeca_accounts > 0 and weighted_b2b_workload > b2b_capacity_effective * 1.50:
+                horeca_hc = int(math.ceil(horeca_accounts / horeca_accounts_effective))
+                residual_b2b_workload -= horeca_accounts
+            if institution_tenders > 0 and weighted_b2b_workload > b2b_capacity_effective * 2.10:
+                inst_hc = int(math.ceil(institution_tenders / institutional_tenders_effective))
+                residual_b2b_workload -= institution_tenders * institutional_complexity_weight
+            shared_b2b_hc = int(math.ceil(max(0.0, residual_b2b_workload) / b2b_capacity_effective)) if residual_b2b_workload > 0 else 0
+
+    exports_active = exports_weighted_workload > 0 and exports_markets > 0 and exports_buyers > 0
+    exports_hc = int(math.ceil(exports_weighted_workload / exports_buyers_effective)) if exports_active else 0
+
+    def _role_state(workload, shared_hc, dedicated_hc, specialist_threshold):
+        if workload <= 0:
+            return "INACTIVE"
+        if shared_hc > 0 and dedicated_hc <= 0:
+            return "SHARED_OWNERSHIP"
+        if dedicated_hc > 0 and workload >= specialist_threshold:
+            return "SPECIALIST_TEAM"
+        return "DEDICATED_OWNERSHIP"
+
+    gt_state = "INACTIVE" if (gt_outlets <= 0 and gt_distributors_planned <= 0) else "SPECIALIST_TEAM" if (gt_sales_executives > 12 or gt_distributor_managers > 0) else "DEDICATED_OWNERSHIP"
+    mt_state = _role_state(mt_accounts, shared_digital_hc, mt_hc, mt_accounts_effective * 3.0)
+    qcom_state = _role_state(qcom_weighted_workload, shared_digital_hc, qcom_hc, qcom_accounts_effective * 3.0)
+    ecommerce_state = _role_state(ecommerce_accounts, shared_digital_hc, ecommerce_hc, ecommerce_accounts_effective * 2.5)
+    horeca_state = _role_state(horeca_accounts, shared_b2b_hc, horeca_hc, horeca_accounts_effective * 2.5)
+    institution_state = _role_state(institution_tenders, shared_b2b_hc, inst_hc, institutional_tenders_effective * 2.0)
+    exports_state = "INACTIVE" if not exports_active else "DEDICATED_OWNERSHIP" if exports_hc <= 2 else "SPECIALIST_TEAM"
+
+    frontline_hc = gt_sales_executives + gt_distributor_managers + shared_digital_hc + mt_hc + qcom_hc + ecommerce_hc + shared_b2b_hc + horeca_hc + inst_hc + exports_hc
     sales_manager = 1 if (gt_outlets + mt_accounts + qcom_buying_accounts + horeca_accounts + institution_tenders + exports_markets + ecommerce_accounts) > 0 else 0
     span_capacity_base = max(1.0, _to_float(sales_executives_per_manager, gt_sales_executives_per_asm if sales_executives_per_manager is None else sales_executives_per_manager))
     span_capacity_effective = max(1.0, span_capacity_base * effective_capacity_multiplier)
-    channel_leadership_hc = 0 if frontline_hc <= 10 else int(math.ceil(frontline_hc / span_capacity_effective))
+    channel_leadership_hc = 0 if gt_sales_executives <= max(8, int(round(span_capacity_effective * 2))) else int(math.ceil((gt_sales_executives - max(8, int(round(span_capacity_effective * 2)))) / max(1.0, span_capacity_effective)))
     total_active_accounts_supported = (
         gt_outlets
         + mt_accounts
@@ -1794,12 +1878,12 @@ def build_channel_sales_output(
         1
         for is_active in [
             gt_outlets > 0 or gt_distributors_planned > 0,
-            mt_accounts > 0,
-            qcom_buying_accounts > 0,
-            ecommerce_accounts > 0,
-            horeca_accounts > 0,
-            institution_tenders > 0,
-            exports_buyers > 0 or exports_markets > 0,
+            mt_state != "INACTIVE",
+            qcom_state != "INACTIVE",
+            ecommerce_state != "INACTIVE",
+            horeca_state != "INACTIVE",
+            institution_state != "INACTIVE",
+            exports_state != "INACTIVE",
         ]
         if is_active
     )
@@ -1849,14 +1933,17 @@ def build_channel_sales_output(
         "export_active_markets": exports_markets,
         "active_channel_count": active_channel_count,
     }
-    sales_coordinator = 1 if (total_active_accounts_supported >= 40 or frontline_hc >= 8) else 0
+    sales_coordinator = 1 if (total_active_accounts_supported >= 80 or frontline_hc >= 10 or active_channel_count >= 6) else 0
 
     commercial_hc_sum = (
         sales_manager
         + gt_hc
+        + gt_distributor_managers
+        + shared_digital_hc
         + mt_hc
         + qcom_hc
         + ecommerce_hc
+        + shared_b2b_hc
         + horeca_hc
         + inst_hc
         + exports_hc
@@ -1896,6 +1983,7 @@ def build_channel_sales_output(
         "required_volume_kg_month": horeca_revenue / max(1.0, horeca_rate),
         "active_accounts": horeca_accounts,
         "accounts": horeca_accounts,
+        "ownership_mode": horeca_state,
         "required_hc": horeca_hc,
         "sales_executives": horeca_hc,
         "accounts_per_manager": horeca_accounts_effective,
@@ -1930,6 +2018,7 @@ def build_channel_sales_output(
         "institutional_required_packs_month": inst_revenue / max(1.0, inst_rate) / 2.0,
         "active_tenders_contracts": institution_tenders,
         "accounts": institution_tenders,
+        "ownership_mode": institution_state,
         "required_hc": inst_hc,
         "account_managers": inst_hc,
         "sales_executives": inst_hc,
@@ -1939,6 +2028,75 @@ def build_channel_sales_output(
         "contract_end_date": institutional_contract_end_date,
         "reconciliation_variance": inst_revenue - inst_mix_revenue,
     }
+    digital_ownership_mode = "INACTIVE" if weighted_digital_accounts <= 0 else "SHARED_OWNERSHIP" if (shared_digital_hc > 0 and (mt_hc + qcom_hc + ecommerce_hc) == 0) else "DEDICATED_OWNERSHIP" if weighted_digital_accounts < digital_specialist_threshold else "SPECIALIST_TEAM"
+    b2b_ownership_mode = "INACTIVE" if weighted_b2b_workload <= 0 else "SHARED_OWNERSHIP" if (shared_b2b_hc > 0 and (horeca_hc + inst_hc) == 0) else "DEDICATED_OWNERSHIP" if weighted_b2b_workload < b2b_specialist_threshold else "SPECIALIST_TEAM"
+    channel_activation_states = {
+        "general_trade": gt_state,
+        "modern_trade": mt_state,
+        "quick_commerce": qcom_state,
+        "ecommerce": ecommerce_state,
+        "horeca": horeca_state,
+        "institutional_government": institution_state,
+        "exports": exports_state,
+    }
+    commercial_structure_details = [
+        {
+            "Role": "Head of Sales",
+            "Ownership Mode": "DEDICATED_OWNERSHIP" if sales_manager > 0 else "INACTIVE",
+            "Operational Workload": f"{active_channel_count:,.0f} active channels",
+            "Role Capacity": "1 leader across active commercial channels",
+            "Recommended HC": int(sales_manager),
+            "Activation Reason": "Commercial activity is active" if sales_manager > 0 else "No active channel workload",
+        },
+        {
+            "Role": "GT Field Team",
+            "Ownership Mode": gt_state,
+            "Operational Workload": f"{gt_outlets:,.0f} outlets | {gt_beats:,.0f} beats",
+            "Role Capacity": f"{outlets_per_exec_effective:,.1f} outlets per executive",
+            "Recommended HC": int(gt_sales_executives),
+            "Activation Reason": "Outlet coverage drives GT field staffing",
+        },
+        {
+            "Role": "GT Distributor Management",
+            "Ownership Mode": "INACTIVE" if gt_distributor_managers == 0 else "DEDICATED_OWNERSHIP",
+            "Operational Workload": f"{gt_distributors_planned:,.0f} distributors",
+            "Role Capacity": f"Head span {governed_head_span:,.0f}, then {distributors_per_manager_effective:,.1f} distributors per manager",
+            "Recommended HC": int(gt_distributor_managers),
+            "Activation Reason": "Dedicated manager activates only after head span is exceeded",
+        },
+        {
+            "Role": "Digital / Key Accounts",
+            "Ownership Mode": digital_ownership_mode,
+            "Operational Workload": f"{weighted_digital_accounts:,.1f} weighted accounts",
+            "Role Capacity": f"{digital_accounts_capacity_effective:,.1f} weighted accounts per KAM",
+            "Recommended HC": int(shared_digital_hc + mt_hc + qcom_hc + ecommerce_hc),
+            "Activation Reason": "MT + QCom + E-commerce pooled at startup until specialization thresholds are crossed",
+        },
+        {
+            "Role": "B2B / Institutional",
+            "Ownership Mode": b2b_ownership_mode,
+            "Operational Workload": f"{weighted_b2b_workload:,.1f} weighted accounts and tenders",
+            "Role Capacity": f"{b2b_capacity_effective:,.1f} weighted workload per manager",
+            "Recommended HC": int(shared_b2b_hc + horeca_hc + inst_hc),
+            "Activation Reason": "HoReCa and Institutional workload is shared first, then specialized",
+        },
+        {
+            "Role": "Exports",
+            "Ownership Mode": exports_state,
+            "Operational Workload": f"{exports_buyers:,.0f} buyers | {exports_markets:,.0f} markets",
+            "Role Capacity": f"{exports_buyers_effective:,.1f} buyers per manager",
+            "Recommended HC": int(exports_hc),
+            "Activation Reason": "Requires active export markets and buyers; planned mix alone is insufficient",
+        },
+        {
+            "Role": "Sales Coordinator / MIS",
+            "Ownership Mode": "SHARED_OWNERSHIP" if sales_coordinator > 0 else "INACTIVE",
+            "Operational Workload": f"{total_active_accounts_supported:,.0f} total active workload units",
+            "Role Capacity": "Activates when team, channel, or reporting complexity crosses threshold",
+            "Recommended HC": int(sales_coordinator),
+            "Activation Reason": "Threshold based on team scale and reporting complexity",
+        },
+    ]
     return {
         "selected_market_revenue": revenue,
         "contract_revenue_total": contract_total,
@@ -1958,6 +2116,13 @@ def build_channel_sales_output(
         "gt_sales_executives": gt_sales_executives,
         "gt_distributor_managers": gt_distributor_managers,
         "general_trade_hc": gt_hc,
+        "gt_total_hc": gt_sales_executives + gt_distributor_managers,
+        "shared_digital_kam_hc": shared_digital_hc,
+        "shared_b2b_manager_hc": shared_b2b_hc,
+        "digital_ownership_mode": digital_ownership_mode,
+        "b2b_ownership_mode": b2b_ownership_mode,
+        "channel_activation_states": channel_activation_states,
+        "commercial_structure_details": commercial_structure_details,
         "mt_kam": mt_hc,
         "modern_trade_hc": mt_hc,
         "qcom_kam": qcom_hc,
@@ -2006,6 +2171,7 @@ def build_channel_sales_output(
             "outlets_per_distributor": max(1, math.ceil(gt_outlets / max(1, gt_distributors_planned))) if gt_outlets else 0,
             "coverage_gap_distributors": max(0, required_distributors - gt_distributors_planned),
             "coverage_status": coverage_status,
+            "ownership_mode": gt_state,
             "sales_executives": gt_sales_executives,
             "distributor_managers": gt_distributor_managers,
             "revenue_per_sales_executive": _to_float(gt_revenue_per_sales_executive, 1.0),
@@ -2026,6 +2192,7 @@ def build_channel_sales_output(
             "revenue": mt_revenue,
             "accounts": mt_accounts,
             "kam": mt_hc,
+            "ownership_mode": mt_state,
             "accounts_per_kam": mt_accounts_effective,
             "formula": "ceil(Active MT Accounts ÷ Effective Accounts per KAM)",
         },
@@ -2041,6 +2208,7 @@ def build_channel_sales_output(
             "monthly_volume_kg": qcom_monthly_volume_kg,
             "kam": qcom_hc,
             "required_kam": qcom_hc,
+            "ownership_mode": qcom_state,
             "accounts_per_kam": qcom_accounts_effective,
             "formula": "ceil(Weighted QCom Workload ÷ Effective Accounts per KAM)",
             "average_revenue_per_platform": qcom_revenue / qcom_platforms if qcom_platforms else 0.0,
@@ -2050,6 +2218,7 @@ def build_channel_sales_output(
             "revenue": ecommerce_revenue,
             "accounts": ecommerce_accounts,
             "kam": ecommerce_hc,
+            "ownership_mode": ecommerce_state,
             "accounts_per_manager": ecommerce_accounts_effective,
             "formula": "ceil(Active E-commerce Accounts ÷ Effective Accounts per Manager)",
         },
@@ -2058,8 +2227,9 @@ def build_channel_sales_output(
             "active_markets": exports_markets,
             "active_buyers": exports_buyers,
             "manager_hc": exports_hc,
+            "ownership_mode": exports_state,
             "buyers_per_manager": exports_buyers_effective,
-            "formula": "ceil((Active Buyers + 0.5 × Active Markets) ÷ Effective Buyers per Manager)",
+            "formula": "Exports HC active only when buyers and markets are active; then ceil((Active Buyers + 0.5 × Active Markets) ÷ Effective Buyers per Manager)",
         },
         "horeca": horeca_obj,
         "institution": institutional_obj,

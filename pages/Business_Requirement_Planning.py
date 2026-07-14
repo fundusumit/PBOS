@@ -1957,21 +1957,37 @@ def render_distributor_channel_drilldown(kpi_name):
 
     if kpi_name == "Total Commercial HC":
         reconciliation_status = "Reconciled" if channel_sales_output.get("commercial_hc_reconciled", False) else "Not Reconciled"
-        render_responsive_detail_table("total_commercial_hc_detail", "Total Commercial HC", pd.DataFrame([
-            {"Item": "Head of Sales", "Value": f"{int(channel_sales_output.get('head_sales_hc', channel_sales_output.get('sales_manager', 0)) or 0):,.0f}"},
-            {"Item": "General Trade", "Value": f"{int(channel_sales_output.get('general_trade_hc', channel_sales_output.get('gt_sales_executives', 0)) or 0):,.0f}"},
-            {"Item": "GT Distributor Managers", "Value": f"{int(channel_sales_output.get('gt_distributor_managers', 0) or 0):,.0f}"},
-            {"Item": "Modern Trade", "Value": f"{int(channel_sales_output.get('modern_trade_hc', channel_sales_output.get('mt_kam', 0)) or 0):,.0f}"},
-            {"Item": "Quick Commerce", "Value": f"{int(channel_sales_output.get('quick_commerce_hc', channel_sales_output.get('qcom_kam', 0)) or 0):,.0f}"},
-            {"Item": "E-commerce", "Value": f"{int(channel_sales_output.get('e_commerce_hc', channel_sales_output.get('ecommerce_kam', 0)) or 0):,.0f}"},
-            {"Item": "HoReCa", "Value": f"{int(channel_sales_output.get('horeca_hc', channel_sales_output.get('horeca_sales_hc', 0)) or 0):,.0f}"},
-            {"Item": "Institutional / Government", "Value": f"{int(channel_sales_output.get('institutional_hc', channel_sales_output.get('institution_government_manager', 0)) or 0):,.0f}"},
-            {"Item": "Exports", "Value": f"{int(channel_sales_output.get('export_hc', channel_sales_output.get('exports_manager', 0)) or 0):,.0f}"},
-            {"Item": "Sales Coordinator / MIS", "Value": f"{int(channel_sales_output.get('sales_coordinator_mis', 0) or 0):,.0f}"},
-            {"Item": "Channel Leadership", "Value": f"{int(channel_sales_output.get('channel_leadership_hc', 0) or 0):,.0f}"},
-            {"Item": "Total Commercial HC", "Value": f"{int(channel_sales_output.get('commercial_hc_sum', channel_sales_output.get('total_commercial_hc', 0)) or 0):,.0f}"},
-            {"Item": "Reconciliation Status", "Value": reconciliation_status},
-        ]), summary_lines=[
+        governed_rows = channel_sales_output.get("commercial_structure_details", []) or []
+        if governed_rows:
+            render_responsive_detail_table(
+                "total_commercial_hc_detail",
+                "Total Commercial HC",
+                pd.DataFrame(governed_rows),
+                summary_lines=[
+                    f"Component Sum (Canonical): {int(channel_sales_output.get('commercial_hc_sum', channel_sales_output.get('total_commercial_hc', 0)) or 0):,.0f}",
+                    f"Existing / Reported HC: {int(channel_sales_output.get('commercial_hc_reported', channel_sales_output.get('total_commercial_hc', 0)) or 0):,.0f}",
+                    f"Reconciliation Status: {reconciliation_status}",
+                ],
+            )
+        else:
+            render_responsive_detail_table("total_commercial_hc_detail", "Total Commercial HC", pd.DataFrame([
+                {"Item": "Head of Sales", "Value": f"{int(channel_sales_output.get('head_sales_hc', channel_sales_output.get('sales_manager', 0)) or 0):,.0f}"},
+                {"Item": "GT Field Team", "Value": f"{int(channel_sales_output.get('gt_sales_executives', 0) or 0):,.0f}"},
+                {"Item": "GT Distributor Managers", "Value": f"{int(channel_sales_output.get('gt_distributor_managers', 0) or 0):,.0f}"},
+                {"Item": "Shared Digital / KAM", "Value": f"{int(channel_sales_output.get('shared_digital_kam_hc', 0) or 0):,.0f}"},
+                {"Item": "Modern Trade (Dedicated)", "Value": f"{int(channel_sales_output.get('modern_trade_hc', channel_sales_output.get('mt_kam', 0)) or 0):,.0f}"},
+                {"Item": "Quick Commerce (Dedicated)", "Value": f"{int(channel_sales_output.get('quick_commerce_hc', channel_sales_output.get('qcom_kam', 0)) or 0):,.0f}"},
+                {"Item": "E-commerce (Dedicated)", "Value": f"{int(channel_sales_output.get('e_commerce_hc', channel_sales_output.get('ecommerce_kam', 0)) or 0):,.0f}"},
+                {"Item": "Shared B2B / Institutional", "Value": f"{int(channel_sales_output.get('shared_b2b_manager_hc', 0) or 0):,.0f}"},
+                {"Item": "HoReCa (Dedicated)", "Value": f"{int(channel_sales_output.get('horeca_hc', channel_sales_output.get('horeca_sales_hc', 0)) or 0):,.0f}"},
+                {"Item": "Institutional / Government (Dedicated)", "Value": f"{int(channel_sales_output.get('institutional_hc', channel_sales_output.get('institution_government_manager', 0)) or 0):,.0f}"},
+                {"Item": "Exports", "Value": f"{int(channel_sales_output.get('export_hc', channel_sales_output.get('exports_manager', 0)) or 0):,.0f}"},
+                {"Item": "Sales Coordinator / MIS", "Value": f"{int(channel_sales_output.get('sales_coordinator_mis', 0) or 0):,.0f}"},
+                {"Item": "Channel Leadership", "Value": f"{int(channel_sales_output.get('channel_leadership_hc', 0) or 0):,.0f}"},
+                {"Item": "Component Sum (Canonical)", "Value": f"{int(channel_sales_output.get('commercial_hc_sum', channel_sales_output.get('total_commercial_hc', 0)) or 0):,.0f}"},
+                {"Item": "Existing / Reported HC", "Value": f"{int(channel_sales_output.get('commercial_hc_reported', channel_sales_output.get('total_commercial_hc', 0)) or 0):,.0f}"},
+                {"Item": "Reconciliation Status", "Value": reconciliation_status},
+            ]), summary_lines=[
             f"Total commercial revenue: {fmt_currency(channel_sales_output.get('total_commercial_revenue', 0.0))}",
             f"Markets supported: {channel_sales_output.get('total_markets_supported', 1):,.0f}",
             f"Active accounts supported: {channel_sales_output.get('total_active_accounts_supported', 0):,.0f}",
@@ -2746,42 +2762,12 @@ sales_coordinator_required = bool(
     or total_active_accounts_supported >= 50
     or selected_plant_market_count > 1
 )
-sales_coordinator_hc = 1 if sales_coordinator_required else 0
-channel_sales_output["sales_coordinator_mis"] = sales_coordinator_hc
-channel_sales_output["sales_coordinator"] = sales_coordinator_hc
-channel_sales_output["head_sales_hc"] = int(channel_sales_output.get("sales_manager", 0) or 0)
-channel_sales_output["general_trade_hc"] = int(channel_sales_output.get("gt_sales_executives", 0) or 0)
-channel_sales_output["modern_trade_hc"] = int(channel_sales_output.get("mt_kam", 0) or 0)
-channel_sales_output["quick_commerce_hc"] = int(channel_sales_output.get("qcom_kam", 0) or 0)
-channel_sales_output["e_commerce_hc"] = int(channel_sales_output.get("ecommerce_kam", 0) or 0)
-channel_sales_output["horeca_hc"] = int(channel_sales_output.get("horeca_sales_hc", 0) or 0)
-channel_sales_output["institutional_hc"] = int(channel_sales_output.get("institution_government_manager", 0) or 0)
-channel_sales_output["export_hc"] = int(channel_sales_output.get("exports_manager", 0) or 0)
-commercial_hc_sum = (
-    channel_sales_output["head_sales_hc"]
-    + channel_sales_output["general_trade_hc"]
-    + channel_sales_output["modern_trade_hc"]
-    + channel_sales_output["quick_commerce_hc"]
-    + channel_sales_output["e_commerce_hc"]
-    + channel_sales_output["horeca_hc"]
-    + channel_sales_output["institutional_hc"]
-    + channel_sales_output["export_hc"]
-)
-commercial_hc_reported = int(channel_sales_output.get("total_commercial_hc", commercial_hc_sum) or commercial_hc_sum)
-commercial_hc_variance = commercial_hc_reported - commercial_hc_sum
-commercial_hc_reconciled = commercial_hc_variance == 0
-channel_sales_output["commercial_hc_sum"] = commercial_hc_sum
-channel_sales_output["commercial_hc_reported"] = commercial_hc_reported
-channel_sales_output["commercial_hc_variance"] = commercial_hc_variance
-channel_sales_output["commercial_hc_reconciled"] = commercial_hc_reconciled
-channel_sales_output["total_commercial_hc"] = commercial_hc_sum
-channel_sales_output["total_sales_hc"] = commercial_hc_sum
+channel_sales_output.setdefault("sales_coordinator_required", sales_coordinator_required)
 channel_sales_output["total_commercial_revenue"] = total_commercial_revenue
 channel_sales_output["reconciliation_gap"] = commercial_reconciliation_gap
 channel_sales_output["selected_market_revenue"] = selected_market_revenue_output
-channel_sales_output["total_markets_supported"] = selected_plant_market_count
-channel_sales_output["total_active_accounts_supported"] = total_active_accounts_supported
-channel_sales_output["sales_coordinator_required"] = sales_coordinator_required
+channel_sales_output.setdefault("total_markets_supported", selected_plant_market_count)
+channel_sales_output.setdefault("total_active_accounts_supported", total_active_accounts_supported)
 validate_required_keys(channel_sales_output, [
     "selected_market_revenue",
     "total_commercial_revenue",
