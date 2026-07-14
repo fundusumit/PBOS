@@ -70,21 +70,6 @@ st.markdown("""
     font-size: 0.72rem;
     text-align: right;
 }
-.pbos-page-section-heading {
-    margin: 2px 0 12px;
-    padding: 0 4px;
-}
-.pbos-page-section-heading h2 {
-    margin: 0;
-    font-size: 1.25rem;
-    color: #13304a;
-    line-height: 1.2;
-}
-.pbos-page-section-heading p {
-    margin: 3px 0 0;
-    font-size: 0.86rem;
-    color: #5f6f7f;
-}
 .pbos-top-controls {
     display: flex;
     justify-content: flex-end;
@@ -119,15 +104,44 @@ st.markdown("""
     margin-bottom: 16px;
 }
 .pbos-section-title {
-    font-size: 1.04rem;
-    font-weight: 700;
-    color: #12324d;
-    margin-bottom: 3px;
+    margin: 0;
+    color: #f8fafc !important;
+    font-size: 1.65rem;
+    font-weight: 800;
+    line-height: 1.22;
+    letter-spacing: -0.02em;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 .pbos-section-subtitle {
-    font-size: 0.84rem;
-    color: #5f6f7f;
-    margin-bottom: 10px;
+    margin-top: 0.35rem;
+    color: #94a3b8 !important;
+    font-size: 0.95rem;
+    font-weight: 450;
+    line-height: 1.5;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+.pbos-section-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    width: 100%;
+    margin: 2rem 0 1rem 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+.pbos-section-accent {
+    flex: 0 0 4px;
+    width: 4px;
+    min-height: 2.7rem;
+    border-radius: 999px;
+    background: #3b82f6;
+    box-shadow: 0 0 14px rgba(59, 130, 246, 0.28);
+}
+.pbos-section-copy {
+    min-width: 0;
+    flex: 1;
 }
 .pbos-kpi-card {
     position: relative;
@@ -545,17 +559,26 @@ div[data-testid="stDialog"] .pbos-capacity-panel .pbos-capacity-value {
         font-size: 0.9rem;
         line-height: 1.45;
     }
-    .pbos-page-section-heading {
-        margin-top: 0;
-        margin-bottom: 10px;
+    .pbos-section-header {
+        gap: 0.7rem;
+        margin-top: 1.65rem;
+        margin-bottom: 0.9rem;
     }
-    .pbos-page-section-heading h2 {
-        font-size: 1.8rem;
-        line-height: 1.2;
+    .pbos-section-accent {
+        flex-basis: 3px;
+        width: 3px;
+        min-height: 2.4rem;
     }
-    .pbos-page-section-heading p {
-        font-size: 0.9rem;
-        line-height: 1.4;
+    .pbos-section-title {
+        font-size: 1.35rem;
+        font-weight: 800;
+        line-height: 1.25;
+        letter-spacing: -0.015em;
+    }
+    .pbos-section-subtitle {
+        margin-top: 0.3rem;
+        font-size: 0.88rem;
+        line-height: 1.45;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] summary {
         font-size: 0.86rem;
@@ -676,6 +699,26 @@ def show_about_pbos():
             st.write("Created by: Sumit Kumar Mukherjee")
 
 
+def render_section_header(title: str, subtitle: str | None = None, section_code: str | None = None):
+    title_text = str(title)
+    if section_code:
+        title_text = f"{section_code}. {title_text}"
+
+    subtitle_html = f"<div class='pbos-section-subtitle'>{escape(str(subtitle))}</div>" if subtitle else ""
+    st.markdown(
+        f"""
+        <div class='pbos-section-header'>
+            <div class='pbos-section-accent'></div>
+            <div class='pbos-section-copy'>
+                <div class='pbos-section-title'>{escape(title_text)}</div>
+                {subtitle_html}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_staffing_bands_table(staffing_df):
     columns = [
         "Function",
@@ -742,14 +785,9 @@ with hero_right:
     st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown("<div class='pbos-demo-note'><b>Demo note:</b> This public version uses planning assumptions and scenario inputs. It does not contain confidential company data or live ERP transactions.</div>", unsafe_allow_html=True)
-st.markdown(
-        """
-        <div class='pbos-page-section-heading'>
-            <h2>Business Strategic Planning</h2>
-            <p>Scenario-based strategic planning for revenue, product portfolios, channels, plant capacity, procurement, logistics, manpower and profitability.</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
+render_section_header(
+    "Business Strategic Planning",
+    "Scenario-based strategic planning for revenue, product portfolios, channels, plant capacity, procurement, logistics, manpower and profitability.",
 )
 
 
@@ -3427,8 +3465,7 @@ def show_farms_required_drilldown():
 
 log_section_start("Corporate Summary")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-title'>Corporate Summary</div>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-subtitle'>Executive snapshot of revenue, demand, capacity and staffing.</div>", unsafe_allow_html=True)
+render_section_header("Corporate Summary", "Executive snapshot of revenue, demand, capacity and staffing.")
 col1, col2, col3, col4 = st.columns(4)
 with col1:
     render_kpi_card("Corporate Revenue", fmt_currency(corporate_plant_revenue), subtitle="Planned | Monthly Revenue", icon_key="corporate_revenue")
@@ -3443,8 +3480,7 @@ log_section_end("Corporate Summary")
 
 log_section_start("Channel Business Ownership")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-title'>Channel Business Ownership</div>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-subtitle'>Revenue ownership and accountable commercial leadership by channel.</div>", unsafe_allow_html=True)
+render_section_header("Channel Business Ownership", "Revenue ownership and accountable commercial leadership by channel.")
 commercial_reconciliation_gap = float(channel_sales_output.get("reconciliation_gap", 0.0) or 0.0)
 total_commercial_revenue_display = float(channel_sales_output.get("total_commercial_revenue", selected_market_revenue) or selected_market_revenue)
 summary_subtitle = "Fully reconciled to selected market revenue"
@@ -3560,8 +3596,7 @@ if channel_sales_output["institution"]["revenue_mode"] != "PLANNING" and abs(cha
 
 log_section_start("Market-specific Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-title'>Market-specific Planning</div>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-subtitle'>Selected market view with market-only presentation.</div>", unsafe_allow_html=True)
+render_section_header("Market-specific Planning", "Selected market view with market-only presentation.")
 col5, col6, col7, col8 = st.columns(4)
 with col5:
     render_kpi_card("Selected Market", selected_market_name, subtitle="Current market focus", icon_key="selected_market")
@@ -3583,8 +3618,7 @@ log_section_end("Market-specific Planning")
 
 log_section_start("Commercial & Distribution Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-title'>Commercial & Distribution Planning</div>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-subtitle'>Portfolio-wise route-to-market, distribution capacity and commercial coverage.</div>", unsafe_allow_html=True)
+render_section_header("Commercial & Distribution Planning", "Portfolio-wise route-to-market, distribution capacity and commercial coverage.")
 product_revenue_tolerance = 0.01
 render_mobile_key_value_panel(
     "Product Revenue Reconciliation",
@@ -3602,7 +3636,7 @@ render_mobile_key_value_panel(
 if abs(distributor_output["product_revenue_variance"]) > product_revenue_tolerance:
     st.warning(f"Product revenue allocation differs from corporate revenue target by {fmt_currency(abs(distributor_output['product_revenue_variance']))}.")
 
-st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:6px;'>A. Portfolio Distribution Network</div>", unsafe_allow_html=True)
+render_section_header("A. Portfolio Distribution Network")
 dcol1, dcol2 = st.columns(2)
 with dcol1:
     distribution_business_card(
@@ -3646,8 +3680,7 @@ with dcol4:
         "dist_fva_business",
     )
 
-st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:10px;'>B. Portfolio Account & Network Capacity</div>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-subtitle'>Channel-account coverage, distributor capacity and route-to-market execution requirements.</div>", unsafe_allow_html=True)
+render_section_header("B. Portfolio Account & Network Capacity", "Channel-account coverage, distributor capacity and route-to-market execution requirements.")
 exec_col1, exec_col2, exec_col3 = st.columns(3)
 with exec_col1:
     gt_execution = channel_sales_output["general_trade"]
@@ -3719,8 +3752,7 @@ log_section_end("Commercial & Distribution Planning")
 
 log_section_start("Plant Capacity Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-title'>Plant Capacity Planning</div>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-subtitle'>Capacity required by the plant to support assigned market demand.</div>", unsafe_allow_html=True)
+render_section_header("Plant Capacity Planning", "Capacity required by the plant to support assigned market demand.")
 colp1, colp2, colp3, colp4 = st.columns(4)
 required_output_mt_day = float(plant_capacity_output.get("required_capacity_mt_day", plant_capacity_output.get("finished_goods_mt_day", 0.0)) or 0.0)
 installed_lines = int(round(float(plant_capacity_output.get("current_installed_lines", plant_capacity_output.get("installed_lines", plant_capacity_output.get("production_lines_required", 1))) or 1)))
@@ -3873,8 +3905,7 @@ log_section_end("Plant Capacity Planning")
 
 log_section_start("Raw Material & Procurement Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-title'>Raw Material & Procurement Planning</div>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-subtitle'>Live bird procurement and raw material conversion for the selected market.</div>", unsafe_allow_html=True)
+render_section_header("Raw Material & Procurement Planning", "Live bird procurement and raw material conversion for the selected market.")
 proc_col1, proc_col2, proc_col3, proc_col4 = st.columns(4)
 with proc_col1:
     render_kpi_card("Live Bird Rate", fmt_rate_per_kg(live_bird_rate), subtitle="Assumption | Registry default can be overridden", icon_key="live_bird_rate")
@@ -3903,12 +3934,10 @@ log_section_end("Raw Material & Procurement Planning")
 
 log_section_start("Logistics Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-title'>Logistics Planning</div>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-subtitle'>Primary live-bird movement and secondary finished-goods delivery.</div>", unsafe_allow_html=True)
+render_section_header("Logistics Planning", "Primary live-bird movement and secondary finished-goods delivery.")
 primary_logistics = logistics_output["primary"]
 secondary_logistics = logistics_output["secondary"]
-st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:6px;'>A. Primary Logistics</div>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-subtitle'>Live bird sourcing → plant</div>", unsafe_allow_html=True)
+render_section_header("A. Primary Logistics", "Live bird sourcing → plant")
 coll1, coll2, coll3, coll4 = st.columns(4)
 with coll1:
     logistics_kpi_card("Primary Vehicles Required", f"{primary_logistics['vehicles_required']:,.0f}", "logistics_primary_vehicles", subtitle="Primary transport")
@@ -3919,8 +3948,7 @@ with coll3:
 with coll4:
     logistics_kpi_card("Average Primary Distance", f"{average_primary_distance_km:,.0f} km", "logistics_total_cost", subtitle="Sourcing radius")
 
-st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:10px;'>B. Secondary Logistics</div>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-subtitle'>Plant → market / distributor / customer</div>", unsafe_allow_html=True)
+render_section_header("B. Secondary Logistics", "Plant → market / distributor / customer")
 coll5, coll6, coll7, coll8, coll9 = st.columns(5)
 with coll5:
     logistics_kpi_card("Secondary Vehicles Required", f"{secondary_logistics['vehicles_required']:,.0f}", "logistics_secondary_vehicles", subtitle="Outbound fleet")
@@ -3937,8 +3965,7 @@ log_section_end("Logistics Planning")
 
 log_section_start("Order & Capacity Intelligence")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-title'>Order & Capacity Intelligence</div>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-subtitle'>Actual order demand compared with planned volume, inventory and plant capacity.</div>", unsafe_allow_html=True)
+render_section_header("Order & Capacity Intelligence", "Actual order demand compared with planned volume, inventory and plant capacity.")
 order_col1, order_col2, order_col3, order_col4 = st.columns(4)
 with order_col1:
     render_kpi_card("Scenario Mode", order_capacity_intelligence.get("scenario_mode", "No Scenario"), subtitle="Scenario", icon_key="scenario_mode")
@@ -3987,8 +4014,7 @@ log_section_end("Order & Capacity Intelligence")
 
 log_section_start("Manpower Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-title'>Manpower Planning</div>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-subtitle'>Department-wise staffing for the selected plant and market plan.</div>", unsafe_allow_html=True)
+render_section_header("Manpower Planning", "Department-wise staffing for the selected plant and market plan.")
 colm1, colm2, colm3, colm4, colm5 = st.columns(5)
 with colm1:
     manpower_kpi_card("Production", manpower_output["production"], "manpower_kpi_production", subtitle="Plant execution")
@@ -4146,8 +4172,7 @@ with st.expander("Reverse Distributor and GT Sales Planning", expanded=False):
 
 log_section_start("Financial Planning")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-title'>Financial Planning</div>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-subtitle'>Revenue bridge from procurement to EBITDA and PAT.</div>", unsafe_allow_html=True)
+render_section_header("Financial Planning", "Revenue bridge from procurement to EBITDA and PAT.")
 chain_cols = st.columns(5)
 with chain_cols[0]:
     render_kpi_card("Revenue", fmt_currency(revenue_rupees), subtitle="Starting point", icon_key="revenue")
@@ -4164,8 +4189,7 @@ log_section_end("Financial Planning")
 
 log_section_start("CEO Recommendation")
 st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-title'>CEO Recommendation</div>", unsafe_allow_html=True)
-st.markdown("<div class='pbos-section-subtitle'>Concise executive view for the current operating plan.</div>", unsafe_allow_html=True)
+render_section_header("CEO Recommendation", "Concise executive view for the current operating plan.")
 horeca_pricing = channel_sales_output.get("horeca", {})
 key_constraint = "Plant utilization requires expansion review." if plant_capacity_output['plant_utilization_pct'] > 85 else "Capacity is within the current operating range."
 st.markdown(
