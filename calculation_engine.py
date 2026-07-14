@@ -361,41 +361,77 @@ def build_plant_capacity_output(
     installed_capacity_mt_day = current_installed_capacity_mt_day
     maximum_current_plant_capacity_mt_day = plant_base_capacity_mt_day * maximum_lines_in_current_plant * maximum_shifts_per_line
     capacity_gap_mt_day = required_capacity_mt_day - installed_capacity_mt_day
-    utilization = required_capacity_mt_day / installed_capacity_mt_day * 100.0 if installed_capacity_mt_day > 0 else 0.0
+    capacity_shortfall_mt_day = max(0.0, required_capacity_mt_day - installed_capacity_mt_day)
+    capacity_headroom_mt_day = max(0.0, installed_capacity_mt_day - required_capacity_mt_day)
+    remaining_current_site_capacity_mt_day = max(0.0, maximum_current_plant_capacity_mt_day - installed_capacity_mt_day)
+    remaining_site_headroom_after_demand_mt_day = max(0.0, maximum_current_plant_capacity_mt_day - required_capacity_mt_day)
+    current_load_ratio_pct = required_capacity_mt_day / installed_capacity_mt_day * 100.0 if installed_capacity_mt_day > 0 else 0.0
+    utilization = current_load_ratio_pct
 
     can_add_shift = best_shifts < maximum_shifts_per_line
     can_add_line = best_lines < maximum_lines_in_current_plant
+    shift_only_capacity_mt_day = plant_base_capacity_mt_day * best_lines * maximum_shifts_per_line
+    line_only_capacity_mt_day = plant_base_capacity_mt_day * maximum_lines_in_current_plant * best_shifts
+    shift_can_close_gap = can_add_shift and required_capacity_mt_day <= shift_only_capacity_mt_day
+    line_can_close_gap = can_add_line and required_capacity_mt_day <= line_only_capacity_mt_day
+    combined_can_close_gap = required_capacity_mt_day <= maximum_current_plant_capacity_mt_day and (can_add_shift or can_add_line)
+
+    recommended_lines = best_lines
+    recommended_shifts = best_shifts
+    if required_capacity_mt_day > 0:
+        recommended_pair = None
+        for lines in range(best_lines, maximum_lines_in_current_plant + 1):
+            for shifts in range(best_shifts, maximum_shifts_per_line + 1):
+                candidate_capacity = plant_base_capacity_mt_day * lines * shifts
+                if candidate_capacity + 1e-9 < required_capacity_mt_day:
+                    continue
+                candidate = (candidate_capacity, lines, shifts)
+                if recommended_pair is None or candidate < recommended_pair:
+                    recommended_pair = candidate
+        if recommended_pair is not None:
+            _, recommended_lines, recommended_shifts = recommended_pair
+    recommended_capacity_mt_day = plant_base_capacity_mt_day * recommended_lines * recommended_shifts
+    projected_utilization_pct = required_capacity_mt_day / recommended_capacity_mt_day * 100.0 if recommended_capacity_mt_day > 0 else 0.0
+    remaining_shift_capacity_mt_day = max(0.0, shift_only_capacity_mt_day - installed_capacity_mt_day)
+    remaining_line_capacity_mt_day = max(0.0, line_only_capacity_mt_day - installed_capacity_mt_day)
     expandable = bool(existing_plant_expandable)
     expanded_max_lines = maximum_lines_in_current_plant + max(0, int(round(_to_float(expansion_line_increment, 1.0)))) if expandable else maximum_lines_in_current_plant
     expanded_site_capacity_mt_day = plant_base_capacity_mt_day * expanded_max_lines * maximum_shifts_per_line
 
     expansion_stage = "A. Existing capacity sufficient"
     recommended_action = "Continue Current Configuration"
-    if required_capacity_mt_day > maximum_current_plant_capacity_mt_day:
-        if expandable and required_capacity_mt_day <= expanded_site_capacity_mt_day:
-            expansion_stage = "E. Expand existing plant"
-            recommended_action = "Expand Existing Plant"
+    supporting_actions = []
+    decision_reason = "Current installed capacity is sufficient for required output."
+    if required_capacity_mt_day <= installed_capacity_mt_day:
+        if current_load_ratio_pct <= review_utilization_pct and current_load_ratio_pct > safe_utilization_pct:
+            expansion_stage = "B. Optimize existing capacity"
+            recommended_action = "Optimize Existing Capacity"
+            decision_reason = "Current installed capacity meets demand but operating load is high enough to warrant optimization."
         else:
-            expansion_stage = "F. Build new plant"
-            recommended_action = "Build New Plant"
-    elif utilization <= safe_utilization_pct:
-        expansion_stage = "A. Existing capacity sufficient"
-        recommended_action = "Continue Current Configuration"
-    elif utilization <= review_utilization_pct:
-        expansion_stage = "B. Increase utilization within safe threshold"
-        recommended_action = "Optimize Existing Capacity"
-    elif can_add_shift:
+            expansion_stage = "A. Existing capacity sufficient"
+            recommended_action = "Continue Current Configuration"
+            decision_reason = "Current installed capacity meets required output."
+    elif shift_can_close_gap:
         expansion_stage = "C. Add shift"
         recommended_action = "Add Shift"
-    elif can_add_line:
+        decision_reason = "Additional shift capacity within current lines can close the current shortfall."
+    elif line_can_close_gap:
         expansion_stage = "D. Add production line"
         recommended_action = "Add Production Line"
+        decision_reason = "Additional line capacity with current shifts can close the current shortfall."
+    elif combined_can_close_gap:
+        expansion_stage = "E. Expand existing plant"
+        recommended_action = "Add Shift and Production Line"
+        supporting_actions = ["Add Shift", "Add Production Line"]
+        decision_reason = "Demand exceeds shift-only and line-only limits, but a combined shift and line expansion within current-site limits can close the shortfall."
     elif expandable and required_capacity_mt_day <= expanded_site_capacity_mt_day:
         expansion_stage = "E. Expand existing plant"
         recommended_action = "Expand Existing Plant"
+        decision_reason = "Current-site configured limits are insufficient, but site expansion can still support required output."
     else:
         expansion_stage = "F. Build new plant"
         recommended_action = "Build New Plant"
+        decision_reason = "Required output exceeds maximum current-site capacity and expandable options are exhausted."
 
     new_plant_required = recommended_action == "Build New Plant" and required_capacity_mt_day > maximum_current_plant_capacity_mt_day
     recommended_new_plant_capacity_mt_day = max(0.0, required_capacity_mt_day - maximum_current_plant_capacity_mt_day) if new_plant_required else 0.0
@@ -415,9 +451,16 @@ def build_plant_capacity_output(
         "maximum_current_plant_capacity_mt_day": maximum_current_plant_capacity_mt_day,
         "required_capacity_mt_day": required_capacity_mt_day,
         "capacity_gap_mt_day": capacity_gap_mt_day,
+        "capacity_shortfall_mt_day": capacity_shortfall_mt_day,
+        "capacity_headroom_mt_day": capacity_headroom_mt_day,
         "production_lines_required": best_lines,
         "plant_utilization_pct": utilization,
         "production_utilization_pct": utilization,
+        "current_load_ratio_pct": current_load_ratio_pct,
+        "recommended_lines": recommended_lines,
+        "recommended_shifts": recommended_shifts,
+        "recommended_capacity_mt_day": recommended_capacity_mt_day,
+        "projected_utilization_pct": projected_utilization_pct,
         "shifts_required": best_shifts,
         "working_hours_per_shift": _to_float(working_hours_per_shift, 8.0),
         "max_shifts": float(maximum_shifts_per_line),
@@ -428,6 +471,14 @@ def build_plant_capacity_output(
         "review_utilization_pct": review_utilization_pct,
         "critical_utilization_pct": critical_utilization_pct,
         "unused_capacity_mt_day": max(0.0, installed_capacity_mt_day - required_capacity_mt_day),
+        "remaining_shift_capacity_mt_day": remaining_shift_capacity_mt_day,
+        "remaining_line_capacity_mt_day": remaining_line_capacity_mt_day,
+        "remaining_current_site_capacity_mt_day": remaining_current_site_capacity_mt_day,
+        "remaining_site_headroom_after_demand_mt_day": remaining_site_headroom_after_demand_mt_day,
+        "shift_only_capacity_mt_day": shift_only_capacity_mt_day,
+        "line_only_capacity_mt_day": line_only_capacity_mt_day,
+        "decision_reason": decision_reason,
+        "supporting_actions": supporting_actions,
         "expansion_stage": expansion_stage,
         "recommended_action": recommended_action,
         "new_plant_required": "Yes" if new_plant_required else "No",

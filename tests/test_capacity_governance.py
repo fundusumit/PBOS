@@ -55,29 +55,82 @@ class CapacityGovernanceTests(unittest.TestCase):
         self.assertEqual(output["new_plant_required"], "Yes")
         self.assertAlmostEqual(output["recommended_new_plant_capacity_mt_day"], 35.0, places=3)
 
-    def test_e_add_shift_when_shift_headroom_exists(self):
+    def test_e_add_shift_when_shift_can_close_gap(self):
         output = build_plant_capacity_output(
-            {"finished_goods_mt_day": 39.1},
+            {"finished_goods_mt_day": 25.0},
             capacity_per_line_mt_day=10.0,
-            max_shifts=3,
-            installed_lines=2,
-            active_shifts=2,
-            maximum_lines_in_current_plant=2,
+            max_shifts=4,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=1,
             existing_plant_expandable=False,
         )
         self.assertEqual(output["recommended_action"], "Add Shift")
 
-    def test_f_add_line_when_no_shift_headroom_and_line_space_exists(self):
+    def test_f_add_shift_and_line_when_combination_required(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 35.0},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=2,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+            existing_plant_expandable=False,
+        )
+        self.assertEqual(output["recommended_action"], "Add Shift and Production Line")
+
+    def test_g_shortfall_and_headroom_labels(self):
         output = build_plant_capacity_output(
             {"finished_goods_mt_day": 39.1},
             capacity_per_line_mt_day=10.0,
-            max_shifts=2,
-            installed_lines=2,
-            active_shifts=2,
-            maximum_lines_in_current_plant=3,
-            existing_plant_expandable=False,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+            existing_plant_expandable=True,
         )
-        self.assertEqual(output["recommended_action"], "Add Production Line")
+        self.assertAlmostEqual(output["capacity_shortfall_mt_day"], 29.1, places=3)
+        self.assertAlmostEqual(output["capacity_headroom_mt_day"], 0.0, places=3)
+
+    def test_h_site_headroom_after_meeting_demand(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 39.1},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+            existing_plant_expandable=True,
+        )
+        self.assertAlmostEqual(output["maximum_current_plant_capacity_mt_day"], 60.0, places=3)
+        self.assertAlmostEqual(output["remaining_site_headroom_after_demand_mt_day"], 20.9, places=3)
+
+    def test_i_recommended_configuration_and_projected_utilization(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 39.1},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+            existing_plant_expandable=True,
+        )
+        self.assertEqual(output["recommended_lines"], 2)
+        self.assertEqual(output["recommended_shifts"], 2)
+        self.assertAlmostEqual(output["recommended_capacity_mt_day"], 40.0, places=3)
+        self.assertAlmostEqual(output["projected_utilization_pct"], 97.75, places=2)
+
+    def test_j_new_plant_not_required_when_within_max_site_capacity(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 39.1},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+            existing_plant_expandable=True,
+        )
+        self.assertEqual(output["new_plant_required"], "No")
 
 
 class PlantNormalizationHotfixTests(unittest.TestCase):
