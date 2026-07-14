@@ -1,5 +1,15 @@
 # PBOS Agent Instructions
 
+## Mandatory Copilot Boundary
+
+Before performing any task in this repository, read and comply with:
+
+COPILOT.md
+
+COPILOT.md defines mandatory scope, architecture, testing, validation and stop conditions.
+
+If an instruction conflicts with COPILOT.md, stop and request clarification.
+
 Project: PBOS — Business Planning Operating System
 
 This is not a generic dashboard. It is a Streamlit presentation layer over a Google Sheets business planning model.
