@@ -503,3 +503,18 @@ A UI fix is successful only when:
 - no horizontal overflow remains;
 - no duplicate renderer is visible;
 - desktop behavior is preserved.
+
+---
+
+## 25. Executive Detail Density Rule
+
+Do not combine multiple business fields into one long display string when the
+user needs to compare them.
+
+For executive detail views:
+
+- one concept per field;
+- structured columns on desktop;
+- stacked labelled fields on mobile;
+- explanations separated from metrics;
+- no dense pipe-separated paragraphs.

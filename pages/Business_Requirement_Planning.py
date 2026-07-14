@@ -539,6 +539,86 @@ div[data-testid="stDialog"] .pbos-capacity-panel .pbos-capacity-value {
     white-space: normal;
     overflow-wrap: anywhere;
 }
+.pbos-commercial-role-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    border: 1px solid #303744;
+    border-radius: 12px;
+    overflow: hidden;
+}
+.pbos-commercial-role-table th,
+.pbos-commercial-role-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #2a303a;
+    vertical-align: top;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+.pbos-commercial-role-table th {
+    color: #aeb8c7;
+    font-weight: 700;
+    text-align: left;
+    font-size: 0.88rem;
+}
+.pbos-commercial-role-table td {
+    color: #f8fafc;
+    font-weight: 600;
+    font-size: 0.94rem;
+}
+.pbos-commercial-reason-row td {
+    padding-top: 0.35rem;
+    padding-bottom: 0.9rem;
+    color: #aeb8c7;
+    font-size: 0.88rem;
+    font-weight: 500;
+    border-bottom: 1px solid #2a303a;
+}
+.pbos-commercial-reason-label {
+    color: #94a3b8;
+    font-weight: 700;
+}
+.pbos-commercial-role-card {
+    border: 1px solid #303744;
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 0.85rem;
+    background: #11151d;
+}
+.pbos-commercial-role-name {
+    color: #f8fafc;
+    font-size: 1rem;
+    font-weight: 800;
+    margin-bottom: 0.75rem;
+}
+.pbos-commercial-field {
+    margin-top: 0.55rem;
+}
+.pbos-commercial-label {
+    color: #94a3b8;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+.pbos-commercial-value {
+    color: #ffffff;
+    margin-top: 0.15rem;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+.pbos-commercial-summary {
+    margin-top: 0.95rem;
+    padding: 0.9rem 1rem;
+    background: #151a23;
+    border: 1px solid #303744;
+    border-radius: 12px;
+    color: #f3f4f6;
+    line-height: 1.5;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
 @media (max-width: 900px) {
     .pbos-page-header {
         padding: 12px 14px;
@@ -1227,6 +1307,117 @@ def render_responsive_detail_table(table_key, title, detail_df, summary_lines=No
         """,
         unsafe_allow_html=True,
     )
+
+
+def _commercial_ownership_label(raw_value):
+        value = str(raw_value or "").strip().upper()
+        return {
+                "DEDICATED_OWNERSHIP": "Dedicated",
+                "SHARED_OWNERSHIP": "Shared",
+                "SPECIALIST_TEAM": "Specialist Team",
+                "INACTIVE": "Inactive",
+        }.get(value, str(raw_value or ""))
+
+
+def render_total_commercial_hc_detail(table_key, governed_rows, summary_rows, variance_text=None):
+        safe_rows = []
+        for row in governed_rows or []:
+                safe_rows.append(
+                        {
+                                "role": str(row.get("Role", "")).strip(),
+                                "ownership": _commercial_ownership_label(row.get("Ownership Mode", "")),
+                                "workload": str(row.get("Operational Workload", "")).strip(),
+                                "capacity": str(row.get("Role Capacity", "")).strip(),
+                                "recommended_hc": str(row.get("Recommended HC", "")).strip(),
+                                "activation_reason": str(row.get("Activation Reason", "")).strip(),
+                        }
+                )
+
+        desktop_rows = []
+        for row in safe_rows:
+                desktop_rows.append(
+                        "<tr>"
+                        f"<td>{escape(row['role'])}</td>"
+                        f"<td>{escape(row['ownership'])}</td>"
+                        f"<td>{escape(row['workload'])}</td>"
+                        f"<td>{escape(row['capacity'])}</td>"
+                        f"<td>{escape(row['recommended_hc'])}</td>"
+                        "</tr>"
+                )
+                if row["activation_reason"]:
+                        desktop_rows.append(
+                                "<tr class='pbos-commercial-reason-row'>"
+                                "<td colspan='5'>"
+                                "<span class='pbos-commercial-reason-label'>Activation Reason: </span>"
+                                f"{escape(row['activation_reason'])}"
+                                "</td>"
+                                "</tr>"
+                        )
+
+        mobile_cards = []
+        for row in safe_rows:
+                mobile_cards.append(
+                        "<div class='pbos-commercial-role-card'>"
+                        f"<div class='pbos-commercial-role-name'>{escape(row['role'])}</div>"
+                        "<div class='pbos-commercial-field'><div class='pbos-commercial-label'>Ownership</div>"
+                        f"<div class='pbos-commercial-value'>{escape(row['ownership'])}</div></div>"
+                        "<div class='pbos-commercial-field'><div class='pbos-commercial-label'>Operational Workload</div>"
+                        f"<div class='pbos-commercial-value'>{escape(row['workload'])}</div></div>"
+                        "<div class='pbos-commercial-field'><div class='pbos-commercial-label'>Role Capacity</div>"
+                        f"<div class='pbos-commercial-value'>{escape(row['capacity'])}</div></div>"
+                        "<div class='pbos-commercial-field'><div class='pbos-commercial-label'>Recommended HC</div>"
+                        f"<div class='pbos-commercial-value'>{escape(row['recommended_hc'])}</div></div>"
+                        "<div class='pbos-commercial-field'><div class='pbos-commercial-label'>Activation Reason</div>"
+                        f"<div class='pbos-commercial-value'>{escape(row['activation_reason'])}</div></div>"
+                        "</div>"
+                )
+
+        summary_lines = [
+                f"<div><span class='pbos-commercial-label'>Component Sum</span><div class='pbos-commercial-value'>{escape(str(summary_rows.get('component_sum', '')))}</div></div>",
+                f"<div class='pbos-commercial-field'><span class='pbos-commercial-label'>Existing / Reported HC</span><div class='pbos-commercial-value'>{escape(str(summary_rows.get('reported_hc', '')))}</div></div>",
+                f"<div class='pbos-commercial-field'><span class='pbos-commercial-label'>Reconciliation Status</span><div class='pbos-commercial-value'>{escape(str(summary_rows.get('reconciliation_status', '')))}</div></div>",
+        ]
+        if variance_text:
+                summary_lines.append(
+                        f"<div class='pbos-commercial-field'><span class='pbos-commercial-label'>Variance</span><div class='pbos-commercial-value'>{escape(str(variance_text))}</div></div>"
+                )
+
+        st.markdown(
+                f"""
+<div id='{escape(table_key)}' class='pbos-responsive-detail'>
+    <div class='pbos-detail-desktop'>
+        <table class='pbos-commercial-role-table'>
+            <colgroup>
+                <col style='width:20%;'>
+                <col style='width:16%;'>
+                <col style='width:27%;'>
+                <col style='width:25%;'>
+                <col style='width:12%;'>
+            </colgroup>
+            <thead>
+                <tr>
+                    <th>Role</th>
+                    <th>Ownership</th>
+                    <th>Operational Workload</th>
+                    <th>Role Capacity</th>
+                    <th>Recommended HC</th>
+                </tr>
+            </thead>
+            <tbody>
+                {''.join(desktop_rows)}
+            </tbody>
+        </table>
+    </div>
+    <div class='pbos-detail-mobile'>
+        {''.join(mobile_cards)}
+    </div>
+    <div class='pbos-commercial-summary'>
+        {''.join(summary_lines)}
+    </div>
+</div>
+                """,
+                unsafe_allow_html=True,
+        )
 
 
 def _recommended_action_subtitle(output):
@@ -2112,42 +2303,88 @@ def render_distributor_channel_drilldown(kpi_name):
     if kpi_name == "Total Commercial HC":
         reconciliation_status = "Reconciled" if channel_sales_output.get("commercial_hc_reconciled", False) else "Not Reconciled"
         governed_rows = channel_sales_output.get("commercial_structure_details", []) or []
-        if governed_rows:
-            render_responsive_detail_table(
-                "total_commercial_hc_detail",
-                "Total Commercial HC",
-                pd.DataFrame(governed_rows),
-                summary_lines=[
-                    f"Component Sum (Canonical): {int(channel_sales_output.get('commercial_hc_sum', channel_sales_output.get('total_commercial_hc', 0)) or 0):,.0f}",
-                    f"Existing / Reported HC: {int(channel_sales_output.get('commercial_hc_reported', channel_sales_output.get('total_commercial_hc', 0)) or 0):,.0f}",
-                    f"Reconciliation Status: {reconciliation_status}",
-                ],
-            )
-        else:
-            render_responsive_detail_table("total_commercial_hc_detail", "Total Commercial HC", pd.DataFrame([
-                {"Item": "Head of Sales", "Value": f"{int(channel_sales_output.get('head_sales_hc', channel_sales_output.get('sales_manager', 0)) or 0):,.0f}"},
-                {"Item": "GT Field Team", "Value": f"{int(channel_sales_output.get('gt_sales_executives', 0) or 0):,.0f}"},
-                {"Item": "GT Distributor Managers", "Value": f"{int(channel_sales_output.get('gt_distributor_managers', 0) or 0):,.0f}"},
-                {"Item": "Shared Digital / KAM", "Value": f"{int(channel_sales_output.get('shared_digital_kam_hc', 0) or 0):,.0f}"},
-                {"Item": "Modern Trade (Dedicated)", "Value": f"{int(channel_sales_output.get('modern_trade_hc', channel_sales_output.get('mt_kam', 0)) or 0):,.0f}"},
-                {"Item": "Quick Commerce (Dedicated)", "Value": f"{int(channel_sales_output.get('quick_commerce_hc', channel_sales_output.get('qcom_kam', 0)) or 0):,.0f}"},
-                {"Item": "E-commerce (Dedicated)", "Value": f"{int(channel_sales_output.get('e_commerce_hc', channel_sales_output.get('ecommerce_kam', 0)) or 0):,.0f}"},
-                {"Item": "Shared B2B / Institutional", "Value": f"{int(channel_sales_output.get('shared_b2b_manager_hc', 0) or 0):,.0f}"},
-                {"Item": "HoReCa (Dedicated)", "Value": f"{int(channel_sales_output.get('horeca_hc', channel_sales_output.get('horeca_sales_hc', 0)) or 0):,.0f}"},
-                {"Item": "Institutional / Government (Dedicated)", "Value": f"{int(channel_sales_output.get('institutional_hc', channel_sales_output.get('institution_government_manager', 0)) or 0):,.0f}"},
-                {"Item": "Exports", "Value": f"{int(channel_sales_output.get('export_hc', channel_sales_output.get('exports_manager', 0)) or 0):,.0f}"},
-                {"Item": "Sales Coordinator / MIS", "Value": f"{int(channel_sales_output.get('sales_coordinator_mis', 0) or 0):,.0f}"},
-                {"Item": "Channel Leadership", "Value": f"{int(channel_sales_output.get('channel_leadership_hc', 0) or 0):,.0f}"},
-                {"Item": "Component Sum (Canonical)", "Value": f"{int(channel_sales_output.get('commercial_hc_sum', channel_sales_output.get('total_commercial_hc', 0)) or 0):,.0f}"},
-                {"Item": "Existing / Reported HC", "Value": f"{int(channel_sales_output.get('commercial_hc_reported', channel_sales_output.get('total_commercial_hc', 0)) or 0):,.0f}"},
-                {"Item": "Reconciliation Status", "Value": reconciliation_status},
-            ]), summary_lines=[
-            f"Total commercial revenue: {fmt_currency(channel_sales_output.get('total_commercial_revenue', 0.0))}",
-            f"Markets supported: {channel_sales_output.get('total_markets_supported', 1):,.0f}",
-            f"Active accounts supported: {channel_sales_output.get('total_active_accounts_supported', 0):,.0f}",
-            f"Stepped complexity signal: {channel_sales_output.get('revenue_complexity_factor', 1.0):,.2f}x",
-            f"Capacity multiplier: {channel_sales_output.get('effective_capacity_multiplier', 1.0):,.2f}x",
-        ])
+        if not governed_rows:
+            head_hc = int(channel_sales_output.get("head_sales_hc", channel_sales_output.get("sales_manager", 0)) or 0)
+            gt_field_hc = int(channel_sales_output.get("gt_sales_executives", 0) or 0)
+            gt_manager_hc = int(channel_sales_output.get("gt_distributor_managers", 0) or 0)
+            digital_hc = int(channel_sales_output.get("shared_digital_kam_hc", 0) or 0) + int(channel_sales_output.get("modern_trade_hc", channel_sales_output.get("mt_kam", 0)) or 0) + int(channel_sales_output.get("quick_commerce_hc", channel_sales_output.get("qcom_kam", 0)) or 0) + int(channel_sales_output.get("e_commerce_hc", channel_sales_output.get("ecommerce_hc", 0)) or 0)
+            b2b_hc = int(channel_sales_output.get("shared_b2b_manager_hc", 0) or 0) + int(channel_sales_output.get("horeca_hc", channel_sales_output.get("horeca_sales_hc", 0)) or 0) + int(channel_sales_output.get("institutional_hc", channel_sales_output.get("institution_government_manager", 0)) or 0)
+            exports_hc = int(channel_sales_output.get("export_hc", channel_sales_output.get("exports_manager", 0)) or 0)
+            coordinator_hc = int(channel_sales_output.get("sales_coordinator_mis", 0) or 0)
+
+            governed_rows = [
+                {
+                    "Role": "Head of Sales",
+                    "Ownership Mode": "DEDICATED_OWNERSHIP" if head_hc > 0 else "INACTIVE",
+                    "Operational Workload": f"{channel_sales_output.get('total_markets_supported', 0):,.0f} active markets",
+                    "Role Capacity": "1 leader across active commercial channels",
+                    "Recommended HC": head_hc,
+                    "Activation Reason": "Commercial activity is active" if head_hc > 0 else "No active channel workload",
+                },
+                {
+                    "Role": "GT Field Team",
+                    "Ownership Mode": "DEDICATED_OWNERSHIP" if gt_field_hc > 0 else "INACTIVE",
+                    "Operational Workload": f"{channel_sales_output.get('gt_target_outlets', 0):,.0f} outlets",
+                    "Role Capacity": f"{channel_sales_output.get('effective_outlets_per_sales_executive', channel_sales_output.get('gt_outlets_per_sales_executive', 0)):,.1f} outlets per executive",
+                    "Recommended HC": gt_field_hc,
+                    "Activation Reason": "Outlet coverage drives GT field staffing",
+                },
+                {
+                    "Role": "GT Distributor Management",
+                    "Ownership Mode": "DEDICATED_OWNERSHIP" if gt_manager_hc > 0 else "INACTIVE",
+                    "Operational Workload": f"{channel_sales_output.get('required_distributors', 0):,.0f} distributors",
+                    "Role Capacity": "Head span and distributor governance threshold",
+                    "Recommended HC": gt_manager_hc,
+                    "Activation Reason": "Dedicated manager activates only after head span is exceeded",
+                },
+                {
+                    "Role": "Digital / Key Accounts",
+                    "Ownership Mode": channel_sales_output.get("digital_ownership_mode", "INACTIVE"),
+                    "Operational Workload": f"{channel_sales_output.get('weighted_digital_accounts', 0.0):,.1f} weighted accounts",
+                    "Role Capacity": f"{channel_sales_output.get('digital_accounts_capacity_effective', 0.0):,.1f} weighted accounts per KAM",
+                    "Recommended HC": digital_hc,
+                    "Activation Reason": "MT + QCom + E-commerce pooled at startup until specialization thresholds are crossed",
+                },
+                {
+                    "Role": "B2B / Institutional",
+                    "Ownership Mode": channel_sales_output.get("b2b_ownership_mode", "INACTIVE"),
+                    "Operational Workload": f"{channel_sales_output.get('weighted_b2b_workload', 0.0):,.1f} weighted accounts and tenders",
+                    "Role Capacity": f"{channel_sales_output.get('b2b_capacity_effective', 0.0):,.1f} weighted workload per manager",
+                    "Recommended HC": b2b_hc,
+                    "Activation Reason": "HoReCa and Institutional workload is shared first, then specialized",
+                },
+                {
+                    "Role": "Exports",
+                    "Ownership Mode": "DEDICATED_OWNERSHIP" if exports_hc > 0 else "INACTIVE",
+                    "Operational Workload": f"{channel_sales_output.get('exports_active_buyers', 0):,.0f} buyers | {channel_sales_output.get('exports_active_markets', 0):,.0f} markets",
+                    "Role Capacity": "Buyers per export manager threshold",
+                    "Recommended HC": exports_hc,
+                    "Activation Reason": "Requires active export markets and buyers; planned mix alone is insufficient",
+                },
+                {
+                    "Role": "Sales Coordinator / MIS",
+                    "Ownership Mode": "SHARED_OWNERSHIP" if coordinator_hc > 0 else "INACTIVE",
+                    "Operational Workload": f"{channel_sales_output.get('total_active_accounts_supported', 0):,.0f} total active workload units",
+                    "Role Capacity": "Activates when team, channel, or reporting complexity crosses threshold",
+                    "Recommended HC": coordinator_hc,
+                    "Activation Reason": "Threshold based on team scale and reporting complexity",
+                },
+            ]
+
+        component_sum = int(channel_sales_output.get("commercial_hc_sum", channel_sales_output.get("total_commercial_hc", 0)) or 0)
+        reported_hc = int(channel_sales_output.get("commercial_hc_reported", channel_sales_output.get("total_commercial_hc", 0)) or 0)
+        variance = int(channel_sales_output.get("commercial_hc_variance", reported_hc - component_sum) or 0)
+
+        render_total_commercial_hc_detail(
+            "total_commercial_hc_detail",
+            governed_rows,
+            {
+                "component_sum": f"{component_sum:,.0f}",
+                "reported_hc": f"{reported_hc:,.0f}",
+                "reconciliation_status": reconciliation_status,
+            },
+            variance_text=f"{variance:+,.0f}" if variance != 0 else None,
+        )
         if not channel_sales_output.get("commercial_hc_reconciled", False):
             st.warning(
                 f"Commercial HC variance detected: reported {int(channel_sales_output.get('commercial_hc_reported', 0) or 0):,.0f} vs component sum {int(channel_sales_output.get('commercial_hc_sum', 0) or 0):,.0f} (variance {int(channel_sales_output.get('commercial_hc_variance', 0) or 0):+,.0f})."
