@@ -2,7 +2,7 @@ import unittest
 
 import pandas as pd
 
-from calculation_engine import build_plant_capacity_output, build_plant_planning, format_configuration
+from calculation_engine import build_plant_capacity_output, build_plant_planning, format_plant_configuration
 
 
 class CapacityGovernanceTests(unittest.TestCase):
@@ -62,7 +62,7 @@ class CapacityGovernanceTests(unittest.TestCase):
         )
         self.assertEqual(
             output["recommended_configuration_label"],
-            format_configuration(output["recommended_lines"], output["recommended_shifts"]),
+            format_plant_configuration(output["recommended_lines"], output["recommended_shifts"]),
         )
 
     def test_a_base_10_one_line_one_shift_capacity_10(self):
@@ -366,6 +366,54 @@ class CapacityGovernanceTests(unittest.TestCase):
         self.assertAlmostEqual(output["maximum_current_plant_capacity_mt_day"], 60.0, places=3)
         self.assertAlmostEqual(output["additional_capacity_required_mt_day"], 33.9, places=3)
         self.assertAlmostEqual(output["recommended_new_plant_capacity_mt_day"], 40.0, places=3)
+
+    def test_mode_f_recommendation_capacity_matches_configuration(self):
+        scenarios = [9.4, 15.0, 39.1, 55.0, 93.9]
+        for demand in scenarios:
+            output = build_plant_capacity_output(
+                {"finished_goods_mt_day": demand},
+                capacity_per_line_mt_day=10.0,
+                max_shifts=3,
+                installed_lines=1,
+                active_shifts=1,
+                maximum_lines_in_current_plant=2,
+            )
+            if output["capacity_recommendation_mode"] == "CURRENT_SITE_OPTIMIZATION":
+                calculated = 10.0 * output["recommended_lines"] * output["recommended_shifts"]
+                self.assertAlmostEqual(calculated, output["recommended_capacity_mt_day"], places=6)
+            else:
+                calculated = 10.0 * output["maximum_site_lines"] * output["maximum_site_shifts"]
+                self.assertAlmostEqual(calculated, output["maximum_current_plant_capacity_mt_day"], places=6)
+
+    def test_mode_g_revenue_switch_updates_without_stale_configuration(self):
+        plant = {
+            "line_capacity_mt_day": 10,
+            "installed_lines": 1,
+            "active_shifts": 1,
+            "maximum_shifts": 3,
+            "maximum_lines_in_current_plant": 2,
+            "installed_capacity_mt_day": 10,
+            "existing_plant_expandable": "Yes",
+        }
+        sequence = [6.0, 25.0, 60.0, 6.0]
+        results = []
+        for revenue_cr in sequence:
+            result = build_plant_planning(
+                plant=plant,
+                assigned_markets=pd.DataFrame([{"revenue_allocation_cr": revenue_cr}]),
+            )
+            out = result["plant_capacity_output"]
+            if out["capacity_recommendation_mode"] == "CURRENT_SITE_OPTIMIZATION":
+                label = out["recommended_configuration_label"]
+            else:
+                label = out["maximum_site_configuration_label"]
+            results.append((revenue_cr, out["capacity_recommendation_mode"], label))
+
+        self.assertEqual(results[0][1], "CURRENT_SITE_OPTIMIZATION")
+        self.assertEqual(results[-1][1], "CURRENT_SITE_OPTIMIZATION")
+        self.assertEqual(results[0][2], results[-1][2])
+        self.assertEqual(results[2][1], "NEW_PLANT_EXPANSION")
+        self.assertNotEqual(results[2][2], "1 line × 1 shift")
 
 
 class PlantNormalizationHotfixTests(unittest.TestCase):

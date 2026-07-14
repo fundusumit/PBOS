@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from calculation_engine import align_manpower_sales, build_channel_sales_output, build_contract_pricing_output, build_distributor_output, build_explainability, build_financial_chain, build_logistics_output, build_order_capacity_intelligence, build_plant_planning
+from calculation_engine import align_manpower_sales, build_channel_sales_output, build_contract_pricing_output, build_distributor_output, build_explainability, build_financial_chain, build_logistics_output, build_order_capacity_intelligence, build_plant_planning, format_plant_configuration
 from runtime_diagnostics import get_runtime_environment, log_dataframe_shape, log_runtime_event, log_section_end, log_section_start, render_display_dataframe, render_display_editor
 
 st.set_page_config(page_title="PBOS — Business Planning Operating System", page_icon="📊", layout="wide")
@@ -344,6 +344,92 @@ st.markdown("""
     overflow-wrap: anywhere;
     line-height: 1.45;
 }
+.pbos-capacity-dialog-content {
+    padding-bottom: 5rem;
+}
+.pbos-capacity-detail-desktop {
+    display: block;
+}
+.pbos-capacity-detail-mobile {
+    display: none;
+}
+.pbos-capacity-detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 0.82rem;
+    border: 1px solid #e6ebf2;
+    border-radius: 12px;
+    overflow: hidden;
+}
+.pbos-capacity-detail-table th,
+.pbos-capacity-detail-table td {
+    border-bottom: 1px solid #eef2f7;
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+.pbos-capacity-detail-table th {
+    background: #f8fafc;
+    color: #334155;
+    font-weight: 700;
+}
+.pbos-capacity-detail-table tbody tr:last-child td {
+    border-bottom: none;
+}
+.pbos-capacity-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    width: 100%;
+}
+.pbos-capacity-detail-item {
+    min-width: 0;
+    padding: 0.9rem;
+    border: 1px solid rgba(128, 128, 128, 0.25);
+    border-radius: 0.75rem;
+    box-sizing: border-box;
+    background: #ffffff;
+}
+.pbos-capacity-detail-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    opacity: 0.72;
+    overflow-wrap: anywhere;
+}
+.pbos-capacity-detail-value {
+    margin-top: 0.35rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.35;
+}
+.pbos-capacity-formula-card {
+    border: 1px solid #dbe3ee;
+    border-radius: 12px;
+    padding: 0.85rem;
+    margin-bottom: 0.6rem;
+    background: #ffffff;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+.pbos-capacity-formula-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #334155;
+    margin-bottom: 0.25rem;
+}
+.pbos-capacity-formula-line {
+    font-size: 0.86rem;
+    color: #475569;
+    line-height: 1.45;
+}
 @media (max-width: 900px) {
     .pbos-page-header {
         padding: 12px 14px;
@@ -468,6 +554,19 @@ st.markdown("""
     .pbos-staffing-wrap table {
         font-size: 0.74rem;
         min-width: 900px;
+    }
+    .pbos-capacity-detail-desktop {
+        display: none;
+    }
+    .pbos-capacity-detail-mobile {
+        display: block;
+        width: 100%;
+    }
+    .pbos-capacity-detail-grid {
+        grid-template-columns: 1fr;
+    }
+    .pbos-capacity-detail-item {
+        width: 100%;
     }
 }
 @media (max-width: 600px) {
@@ -869,10 +968,50 @@ def utilization_status(utilization_pct):
     return "Expansion Planning"
 
 
-def format_configuration(lines: int, shifts: int) -> str:
-    line_word = "line" if lines == 1 else "lines"
-    shift_word = "shift" if shifts == 1 else "shifts"
-    return f"{lines} {line_word} × {shifts} {shift_word}"
+def render_capacity_detail_section(section_key, rows):
+    header_html = "<tr><th>Metric</th><th>Value</th></tr>"
+    table_row_html = "".join(
+        f"<tr><td>{escape(str(row.get('Metric', '')))}</td><td>{escape(str(row.get('Value', '')))}</td></tr>"
+        for row in rows
+    )
+    card_html = "".join(
+        (
+            "<div class='pbos-capacity-detail-item'>"
+            f"<div class='pbos-capacity-detail-label'>{escape(str(row.get('Metric', '')))}</div>"
+            f"<div class='pbos-capacity-detail-value'>{escape(str(row.get('Value', '')))}</div>"
+            "</div>"
+        )
+        for row in rows
+    )
+    st.markdown(
+        f"""
+        <div class='pbos-capacity-detail-desktop'>
+          <table class='pbos-capacity-detail-table' id='pbos-capacity-table-{escape(section_key)}'>
+            <thead>{header_html}</thead>
+            <tbody>{table_row_html}</tbody>
+          </table>
+        </div>
+        <div class='pbos-capacity-detail-mobile'>
+          <div class='pbos-capacity-detail-grid' id='pbos-capacity-cards-{escape(section_key)}'>
+            {card_html}
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_capacity_formula_block(title, lines):
+    formula_lines = "".join(f"<div class='pbos-capacity-formula-line'>{escape(str(line))}</div>" for line in lines)
+    st.markdown(
+        f"""
+        <div class='pbos-capacity-formula-card'>
+          <div class='pbos-capacity-formula-title'>{escape(str(title))}</div>
+          {formula_lines}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _recommended_action_subtitle(output):
@@ -888,7 +1027,7 @@ def render_plant_capacity_governance_dialog():
     base_capacity = float(plant_capacity_output.get("plant_base_capacity_mt_day", plant_capacity_output.get("capacity_per_line_mt_day", 0.0)) or 0.0)
     installed_lines = int(round(float(plant_capacity_output.get("current_installed_lines", plant_capacity_output.get("installed_lines", plant_capacity_output.get("production_lines_required", 1))) or 1)))
     active_shifts = int(round(float(plant_capacity_output.get("current_active_shifts", plant_capacity_output.get("active_shifts", plant_capacity_output.get("shifts_required", 1))) or 1)))
-    current_configuration_label = str(plant_capacity_output.get("current_configuration_label", f"{installed_lines:,.0f} {'line' if installed_lines == 1 else 'lines'} × {active_shifts:,.0f} {'shift' if active_shifts == 1 else 'shifts'}"))
+    current_configuration_label = str(plant_capacity_output.get("current_configuration_label", format_plant_configuration(installed_lines, active_shifts)))
     installed_capacity = float(plant_capacity_output.get("current_installed_capacity_mt_day", plant_capacity_output.get("installed_capacity_mt_day", 0.0)) or 0.0)
     max_shifts = int(round(float(plant_capacity_output.get("maximum_shifts_per_line", plant_capacity_output.get("max_shifts", 3)) or 3)))
     max_lines = int(round(float(plant_capacity_output.get("maximum_lines_in_current_plant", installed_lines) or installed_lines)))
@@ -907,9 +1046,9 @@ def render_plant_capacity_governance_dialog():
     maximum_site_shifts = int(round(float(plant_capacity_output.get("maximum_site_shifts", max_shifts) or max_shifts)))
     maximum_site_configuration_label = str(plant_capacity_output.get("maximum_site_configuration_label", "")).strip()
     if not maximum_site_configuration_label:
-        maximum_site_configuration_label = format_configuration(maximum_site_lines, maximum_site_shifts)
+        maximum_site_configuration_label = format_plant_configuration(maximum_site_lines, maximum_site_shifts)
     if not recommended_configuration_label and capacity_recommendation_mode == "CURRENT_SITE_OPTIMIZATION":
-        recommended_configuration_label = format_configuration(recommended_lines, recommended_shifts)
+        recommended_configuration_label = format_plant_configuration(recommended_lines, recommended_shifts)
     remaining_shift_capacity = float(plant_capacity_output.get("remaining_shift_capacity_mt_day", 0.0) or 0.0)
     remaining_line_capacity = float(plant_capacity_output.get("remaining_line_capacity_mt_day", 0.0) or 0.0)
     remaining_site_capacity = float(plant_capacity_output.get("remaining_current_site_capacity_mt_day", 0.0) or 0.0)
@@ -924,6 +1063,7 @@ def render_plant_capacity_governance_dialog():
     decision_reason = str(plant_capacity_output.get("decision_reason", ""))
     supporting_actions = plant_capacity_output.get("supporting_actions", []) or []
 
+    st.markdown("<div class='pbos-capacity-dialog-content'>", unsafe_allow_html=True)
     st.write("This view explains the current plant configuration, capacity shortfall or headroom, available expansion options, and the next governed capacity action.")
 
     if capacity_recommendation_mode not in {"CURRENT_SITE_OPTIMIZATION", "NEW_PLANT_EXPANSION"}:
@@ -935,8 +1075,55 @@ def render_plant_capacity_governance_dialog():
         )
         st.warning("Configuration Review Required")
 
+    required_fields_by_mode = {
+        "CURRENT_SITE_OPTIMIZATION": [
+            "recommended_lines",
+            "recommended_shifts",
+            "recommended_configuration_label",
+            "recommended_capacity_mt_day",
+        ],
+        "NEW_PLANT_EXPANSION": [
+            "maximum_site_lines",
+            "maximum_site_shifts",
+            "maximum_site_configuration_label",
+            "maximum_current_plant_capacity_mt_day",
+            "additional_capacity_required_mt_day",
+            "recommended_new_plant_capacity_mt_day",
+            "total_future_capacity_mt_day",
+            "projected_future_utilization_pct",
+        ],
+    }
+    if capacity_recommendation_mode in required_fields_by_mode:
+        missing_fields = []
+        for field in required_fields_by_mode[capacity_recommendation_mode]:
+            field_value = plant_capacity_output.get(field)
+            if field_value is None or (isinstance(field_value, str) and field_value.strip() == ""):
+                missing_fields.append(field)
+        if missing_fields:
+            log_runtime_event(
+                "plant_capacity_missing_canonical_fields_dialog",
+                capacity_recommendation_mode=capacity_recommendation_mode,
+                missing_fields=",".join(missing_fields),
+            )
+            st.warning("Configuration Review Required")
+
+    displayed_lines = recommended_lines if capacity_recommendation_mode == "CURRENT_SITE_OPTIMIZATION" else maximum_site_lines
+    displayed_shifts = recommended_shifts if capacity_recommendation_mode == "CURRENT_SITE_OPTIMIZATION" else maximum_site_shifts
+    displayed_capacity = recommended_capacity if capacity_recommendation_mode == "CURRENT_SITE_OPTIMIZATION" else max_site_capacity
+    expected_displayed_capacity = base_capacity * displayed_lines * displayed_shifts
+    if abs(expected_displayed_capacity - displayed_capacity) > 1e-6:
+        log_runtime_event(
+            "plant_capacity_dialog_capacity_mismatch",
+            capacity_recommendation_mode=capacity_recommendation_mode,
+            displayed_lines=displayed_lines,
+            displayed_shifts=displayed_shifts,
+            displayed_capacity_mt_day=f"{displayed_capacity:.4f}",
+            expected_capacity_mt_day=f"{expected_displayed_capacity:.4f}",
+        )
+        st.warning("Configuration Review Required")
+
     st.markdown("**A. Current State**")
-    requirement_rows = pd.DataFrame([
+    requirement_rows = [
         {"Metric": "Current Installed Lines", "Value": f"{installed_lines:,.0f}"},
         {"Metric": "Current Active Shifts", "Value": f"{active_shifts:,.0f}"},
         {"Metric": "Current Configuration", "Value": current_configuration_label},
@@ -945,11 +1132,11 @@ def render_plant_capacity_governance_dialog():
         {"Metric": "Current Installed Capacity Shortfall", "Value": f"{capacity_shortfall:,.1f} MT/day" if capacity_shortfall > 0 else "0.0 MT/day"},
         {"Metric": "Current Capacity Headroom", "Value": f"{capacity_headroom:,.1f} MT/day" if capacity_headroom > 0 else "0.0 MT/day"},
         {"Metric": "Current Load Ratio", "Value": f"{current_load_ratio:,.1f}%"},
-    ])
-    render_display_dataframe(st, "plant_capacity_current_requirement", requirement_rows, hide_index=True, width="stretch")
+    ]
+    render_capacity_detail_section("current_state", requirement_rows)
 
     st.markdown("**B. Current-Site Potential**")
-    config_rows = pd.DataFrame([
+    config_rows = [
         {"Metric": "Base Capacity per Line per Shift", "Value": f"{base_capacity:,.1f} MT/day"},
         {"Metric": "Maximum Lines in Current Plant", "Value": f"{max_lines:,.0f}"},
         {"Metric": "Maximum Shifts per Line", "Value": f"{max_shifts:,.0f}"},
@@ -957,26 +1144,33 @@ def render_plant_capacity_governance_dialog():
         {"Metric": "Maximum Current-Site Capacity", "Value": f"{max_site_capacity:,.1f} MT/day"},
         {"Metric": "Current-Site Capacity Deficit", "Value": f"{additional_capacity_required:,.1f} MT/day" if additional_capacity_required > 0 else "0.0 MT/day"},
         {"Metric": "Current-Site Capacity Headroom", "Value": f"{site_headroom_after_demand:,.1f} MT/day" if site_headroom_after_demand > 0 else "0.0 MT/day"},
-    ])
-    render_display_dataframe(st, "plant_capacity_current_configuration", config_rows, hide_index=True, width="stretch")
+    ]
+    render_capacity_detail_section("current_site_potential", config_rows)
 
     st.markdown("**C. Recommendation Mode**")
     st.write("Current-Site Optimization" if capacity_recommendation_mode == "CURRENT_SITE_OPTIMIZATION" else "New-Plant Expansion" if capacity_recommendation_mode == "NEW_PLANT_EXPANSION" else "Configuration Review Required")
 
-    st.markdown("**D. Recommended Action**")
+    st.markdown("**D. Recommendation**")
     if capacity_recommendation_mode == "CURRENT_SITE_OPTIMIZATION":
-        st.write(f"Recommended Lines: {recommended_lines:,.0f}")
-        st.write(f"Recommended Shifts: {recommended_shifts:,.0f}")
-        st.write(f"Recommended Configuration: {recommended_configuration_label if recommended_configuration_label else 'Configuration Review Required'}")
-        st.write(f"Recommended Capacity: {recommended_capacity:,.1f} MT/day")
-        st.write(f"Projected Utilization: {projected_utilization:,.1f}%")
+        recommendation_rows = [
+            {"Metric": "Recommended Configuration", "Value": recommended_configuration_label if recommended_configuration_label else "Configuration Review Required"},
+            {"Metric": "Recommended Capacity", "Value": f"{recommended_capacity:,.1f} MT/day"},
+            {"Metric": "Recommended Action", "Value": recommended_action},
+            {"Metric": "Projected Utilization", "Value": f"{projected_utilization:,.1f}%"},
+            {"Metric": "New Plant Required", "Value": "No"},
+        ]
     else:
-        st.write(f"Maximum Current-Site Configuration: {maximum_site_configuration_label}")
-        st.write(f"Maximum Current-Site Capacity: {max_site_capacity:,.1f} MT/day")
-        st.write(f"Additional Capacity Required: {additional_capacity_required:,.1f} MT/day")
-        st.write(f"Recommended New-Plant Capacity: {recommended_new_plant_capacity:,.1f} MT/day")
-        st.write(f"Total Future Capacity: {total_future_capacity:,.1f} MT/day")
-        st.write(f"Projected Future Utilization: {projected_future_utilization:,.1f}%")
+        recommendation_rows = [
+            {"Metric": "Maximum Current-Site Configuration", "Value": maximum_site_configuration_label},
+            {"Metric": "Maximum Current-Site Capacity", "Value": f"{max_site_capacity:,.1f} MT/day"},
+            {"Metric": "Additional Capacity Required", "Value": f"{additional_capacity_required:,.1f} MT/day"},
+            {"Metric": "Recommended New-Plant Capacity", "Value": f"{recommended_new_plant_capacity:,.1f} MT/day"},
+            {"Metric": "Total Future Capacity", "Value": f"{total_future_capacity:,.1f} MT/day"},
+            {"Metric": "Projected Future Utilization", "Value": f"{projected_future_utilization:,.1f}%"},
+        ]
+    render_capacity_detail_section("recommendation", recommendation_rows)
+
+    st.markdown("**Recommended Action**")
     st.write(recommended_action)
     if supporting_actions:
         st.write("Supporting step(s): " + ", ".join([str(x) for x in supporting_actions]))
@@ -991,33 +1185,84 @@ def render_plant_capacity_governance_dialog():
         st.write(f"Recommended New Plant Capacity: {recommended_new_plant_capacity:,.1f} MT/day")
 
     st.markdown("**Expansion Headroom Reference**")
-    headroom_rows = pd.DataFrame([
+    headroom_rows = [
         {"Metric": "Remaining Shift Capacity", "Value": f"{remaining_shift_capacity:,.1f} MT/day"},
         {"Metric": "Remaining Line Capacity", "Value": f"{remaining_line_capacity:,.1f} MT/day"},
         {"Metric": "Remaining Current-Site Capacity", "Value": f"{remaining_site_capacity:,.1f} MT/day"},
         {"Metric": "Maximum Site Headroom After Meeting Demand", "Value": f"{site_headroom_after_demand:,.1f} MT/day"},
         {"Metric": "Site Expandable", "Value": site_expandable},
         {"Metric": "Cold Storage Required", "Value": f"{cold_storage_required:,.1f} MT"},
-    ])
-    render_display_dataframe(st, "plant_capacity_expansion_headroom", headroom_rows, hide_index=True, width="stretch")
+    ]
+    render_capacity_detail_section("expansion_reference", headroom_rows)
 
     st.markdown("**Formula Section**")
-    st.write("Current Installed Capacity = Base Capacity per Line per Shift x Installed Lines x Active Shifts")
-    st.write(f"Worked: {base_capacity:,.1f} x {installed_lines:,.0f} x {active_shifts:,.0f} = {installed_capacity:,.1f} MT/day")
-    st.write("Current Installed Capacity Shortfall = Required Output - Current Installed Capacity")
-    st.write(f"Worked: {required_output:,.1f} - {installed_capacity:,.1f} = {capacity_shortfall:,.1f} MT/day shortfall")
-    st.write("Maximum Current-Site Capacity = Base Capacity per Line per Shift x Maximum Lines x Maximum Shifts per Line")
-    st.write(f"Worked: {base_capacity:,.1f} x {max_lines:,.0f} x {max_shifts:,.0f} = {max_site_capacity:,.1f} MT/day")
-    st.write("Current-Site Capacity Deficit = Required Output - Maximum Current-Site Capacity")
-    st.write(f"Worked: {required_output:,.1f} - {max_site_capacity:,.1f} = {additional_capacity_required:,.1f} MT/day")
+    render_capacity_formula_block(
+        "Current Installed Capacity",
+        [
+            "= Base Capacity per Line per Shift × Installed Lines × Active Shifts",
+            f"= {base_capacity:,.1f} × {installed_lines:,.0f} × {active_shifts:,.0f}",
+            f"= {installed_capacity:,.1f} MT/day",
+        ],
+    )
+    render_capacity_formula_block(
+        "Current Installed Capacity Shortfall",
+        [
+            "= Required Output − Current Installed Capacity",
+            f"= {required_output:,.1f} − {installed_capacity:,.1f}",
+            f"= {capacity_shortfall:,.1f} MT/day",
+        ],
+    )
+    render_capacity_formula_block(
+        "Maximum Current-Site Capacity",
+        [
+            "= Base Capacity per Line per Shift × Maximum Lines × Maximum Shifts per Line",
+            f"= {base_capacity:,.1f} × {max_lines:,.0f} × {max_shifts:,.0f}",
+            f"= {max_site_capacity:,.1f} MT/day",
+        ],
+    )
+    render_capacity_formula_block(
+        "Current-Site Capacity Deficit",
+        [
+            "= Required Output − Maximum Current-Site Capacity",
+            f"= {required_output:,.1f} − {max_site_capacity:,.1f}",
+            f"= {additional_capacity_required:,.1f} MT/day",
+        ],
+    )
     if capacity_recommendation_mode == "CURRENT_SITE_OPTIMIZATION":
-        st.write("Projected Utilization = Required Output / Recommended Capacity x 100")
-        st.write(f"Worked: {required_output:,.1f} / {recommended_capacity:,.1f} x 100 = {projected_utilization:,.1f}%")
+        render_capacity_formula_block(
+            "Recommended Capacity",
+            [
+                "= Base Capacity per Line per Shift × Recommended Lines × Recommended Shifts",
+                f"= {base_capacity:,.1f} × {recommended_lines:,.0f} × {recommended_shifts:,.0f}",
+                f"= {recommended_capacity:,.1f} MT/day",
+            ],
+        )
+        render_capacity_formula_block(
+            "Projected Utilization",
+            [
+                "= Required Output ÷ Recommended Capacity × 100",
+                f"= {required_output:,.1f} ÷ {recommended_capacity:,.1f} × 100",
+                f"= {projected_utilization:,.1f}%",
+            ],
+        )
     else:
-        st.write("Total Future Capacity = Maximum Current-Site Capacity + Recommended New-Plant Capacity")
-        st.write(f"Worked: {max_site_capacity:,.1f} + {recommended_new_plant_capacity:,.1f} = {total_future_capacity:,.1f} MT/day")
-        st.write("Projected Future Utilization = Required Output / Total Future Capacity x 100")
-        st.write(f"Worked: {required_output:,.1f} / {total_future_capacity:,.1f} x 100 = {projected_future_utilization:,.1f}%")
+        render_capacity_formula_block(
+            "Total Future Capacity",
+            [
+                "= Maximum Current-Site Capacity + Recommended New-Plant Capacity",
+                f"= {max_site_capacity:,.1f} + {recommended_new_plant_capacity:,.1f}",
+                f"= {total_future_capacity:,.1f} MT/day",
+            ],
+        )
+        render_capacity_formula_block(
+            "Projected Future Utilization",
+            [
+                "= Required Output ÷ Total Future Capacity × 100",
+                f"= {required_output:,.1f} ÷ {total_future_capacity:,.1f} × 100",
+                f"= {projected_future_utilization:,.1f}%",
+            ],
+        )
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def show_plant_capacity_governance_dialog():
@@ -3442,12 +3687,12 @@ recommended_lines = int(round(float(plant_capacity_output.get("recommended_lines
 recommended_shifts = int(round(float(plant_capacity_output.get("recommended_shifts", 1) or 1)))
 recommended_configuration_label = str(plant_capacity_output.get("recommended_configuration_label", "")).strip()
 if not recommended_configuration_label and capacity_recommendation_mode == "CURRENT_SITE_OPTIMIZATION":
-    recommended_configuration_label = format_configuration(recommended_lines, recommended_shifts)
+    recommended_configuration_label = format_plant_configuration(recommended_lines, recommended_shifts)
 maximum_site_lines = int(round(float(plant_capacity_output.get("maximum_site_lines", plant_capacity_output.get("maximum_lines_in_current_plant", installed_lines)) or installed_lines)))
 maximum_site_shifts = int(round(float(plant_capacity_output.get("maximum_site_shifts", plant_capacity_output.get("maximum_shifts_per_line", 1)) or 1)))
 maximum_site_configuration_label = str(plant_capacity_output.get("maximum_site_configuration_label", "")).strip()
 if not maximum_site_configuration_label:
-    maximum_site_configuration_label = format_configuration(maximum_site_lines, maximum_site_shifts)
+    maximum_site_configuration_label = format_plant_configuration(maximum_site_lines, maximum_site_shifts)
 base_capacity = float(plant_capacity_output.get("plant_base_capacity_mt_day", plant_capacity_output.get("capacity_per_line_mt_day", 0.0)) or 0.0)
 installed_capacity_mt_day = float(plant_capacity_output.get("current_installed_capacity_mt_day", plant_capacity_output.get("installed_capacity_mt_day", 0.0)) or 0.0)
 recommended_capacity_mt_day = float(plant_capacity_output.get("recommended_capacity_mt_day", installed_capacity_mt_day) or installed_capacity_mt_day)
@@ -3477,8 +3722,51 @@ if capacity_recommendation_mode == "CURRENT_SITE_OPTIMIZATION" and abs(expected_
         recommended_configuration_label=recommended_configuration_label,
     )
     third_card_value = "Configuration Review Required"
-    third_card_subtitle = f"Expected {expected_recommended_capacity_mt_day:,.1f} MT/day from {format_configuration(recommended_lines, recommended_shifts)}"
+    third_card_subtitle = f"Expected {expected_recommended_capacity_mt_day:,.1f} MT/day from {format_plant_configuration(recommended_lines, recommended_shifts)}"
     st.warning("Configuration Review Required")
+expected_max_capacity_mt_day = base_capacity * maximum_site_lines * maximum_site_shifts
+if capacity_recommendation_mode == "NEW_PLANT_EXPANSION" and abs(expected_max_capacity_mt_day - max_capacity_mt_day) > capacity_consistency_tolerance:
+    log_runtime_event(
+        "plant_max_site_configuration_reconciliation_mismatch",
+        expected_capacity_mt_day=f"{expected_max_capacity_mt_day:.4f}",
+        reported_max_capacity_mt_day=f"{max_capacity_mt_day:.4f}",
+        maximum_site_lines=maximum_site_lines,
+        maximum_site_shifts=maximum_site_shifts,
+        maximum_site_configuration_label=maximum_site_configuration_label,
+    )
+    third_card_value = "Configuration Review Required"
+    third_card_subtitle = f"Expected {expected_max_capacity_mt_day:,.1f} MT/day from {format_plant_configuration(maximum_site_lines, maximum_site_shifts)}"
+    st.warning("Configuration Review Required")
+
+required_fields_by_mode = {
+    "CURRENT_SITE_OPTIMIZATION": [
+        "recommended_configuration_label",
+        "recommended_capacity_mt_day",
+        "recommended_lines",
+        "recommended_shifts",
+    ],
+    "NEW_PLANT_EXPANSION": [
+        "maximum_site_configuration_label",
+        "maximum_current_plant_capacity_mt_day",
+        "additional_capacity_required_mt_day",
+        "recommended_new_plant_capacity_mt_day",
+    ],
+}
+if capacity_recommendation_mode in required_fields_by_mode:
+    missing_fields = []
+    for field in required_fields_by_mode[capacity_recommendation_mode]:
+        field_value = plant_capacity_output.get(field)
+        if field_value is None or (isinstance(field_value, str) and field_value.strip() == ""):
+            missing_fields.append(field)
+    if missing_fields:
+        log_runtime_event(
+            "plant_capacity_missing_canonical_fields_main_card",
+            capacity_recommendation_mode=capacity_recommendation_mode,
+            missing_fields=",".join(missing_fields),
+        )
+        third_card_value = "Configuration Review Required"
+        third_card_subtitle = f"Missing: {', '.join(missing_fields)}"
+        st.warning("Configuration Review Required")
 if capacity_recommendation_mode not in {"CURRENT_SITE_OPTIMIZATION", "NEW_PLANT_EXPANSION"}:
     log_runtime_event(
         "plant_capacity_mode_missing_main_card",

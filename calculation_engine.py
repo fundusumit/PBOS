@@ -39,16 +39,12 @@ def _normalize_mapping(value):
     return {}
 
 
-def format_configuration(lines: int, shifts: int) -> str:
-    lines_int = max(1, int(round(_to_float(lines, 1.0))))
-    shifts_int = max(1, int(round(_to_float(shifts, 1.0))))
-    line_word = "line" if lines_int == 1 else "lines"
-    shift_word = "shift" if shifts_int == 1 else "shifts"
-    return f"{lines_int} {line_word} × {shifts_int} {shift_word}"
-
-
-def _configuration_label(lines, shifts):
-    return format_configuration(lines, shifts)
+def format_plant_configuration(lines: int, shifts: int) -> str:
+    safe_lines = max(int(round(_to_float(lines, 0.0))), 0)
+    safe_shifts = max(int(round(_to_float(shifts, 0.0))), 0)
+    line_word = "line" if safe_lines == 1 else "lines"
+    shift_word = "shift" if safe_shifts == 1 else "shifts"
+    return f"{safe_lines} {line_word} × {safe_shifts} {shift_word}"
 
 
 def _coerce_percent(value):
@@ -371,7 +367,7 @@ def build_plant_capacity_output(
 
     current_installed_lines = best_lines
     current_active_shifts = best_shifts
-    current_configuration_label = format_configuration(current_installed_lines, current_active_shifts)
+    current_configuration_label = format_plant_configuration(current_installed_lines, current_active_shifts)
     current_installed_capacity_mt_day = plant_base_capacity_mt_day * current_installed_lines * current_active_shifts
     installed_capacity_mt_day = current_installed_capacity_mt_day
     maximum_current_plant_capacity_mt_day = plant_base_capacity_mt_day * maximum_lines_in_current_plant * maximum_shifts_per_line
@@ -395,20 +391,22 @@ def build_plant_capacity_output(
     recommended_shifts = current_active_shifts
     if required_capacity_mt_day > 0:
         recommended_pair = None
-        for lines in range(current_installed_lines, maximum_lines_in_current_plant + 1):
-            for shifts in range(current_active_shifts, maximum_shifts_per_line + 1):
+        for lines in range(1, maximum_lines_in_current_plant + 1):
+            for shifts in range(1, maximum_shifts_per_line + 1):
                 candidate_capacity = plant_base_capacity_mt_day * lines * shifts
                 if candidate_capacity + 1e-9 < required_capacity_mt_day:
                     continue
-                candidate = (candidate_capacity, lines, shifts)
+                excess_capacity = candidate_capacity - required_capacity_mt_day
+                total_operating_units = lines * shifts
+                candidate = (excess_capacity, total_operating_units, lines, shifts)
                 if recommended_pair is None or candidate < recommended_pair:
                     recommended_pair = candidate
         if recommended_pair is not None:
-            _, recommended_lines, recommended_shifts = recommended_pair
+            _, _, recommended_lines, recommended_shifts = recommended_pair
 
     maximum_site_lines = maximum_lines_in_current_plant
     maximum_site_shifts = maximum_shifts_per_line
-    maximum_site_configuration_label = format_configuration(maximum_site_lines, maximum_site_shifts)
+    maximum_site_configuration_label = format_plant_configuration(maximum_site_lines, maximum_site_shifts)
     current_capacity_shortfall_mt_day = max(0.0, required_capacity_mt_day - current_installed_capacity_mt_day)
     current_site_capacity_deficit_mt_day = max(0.0, required_capacity_mt_day - maximum_current_plant_capacity_mt_day)
     capacity_recommendation_mode = (
@@ -424,7 +422,7 @@ def build_plant_capacity_output(
 
     if capacity_recommendation_mode == "CURRENT_SITE_OPTIMIZATION":
         recommended_capacity_mt_day = plant_base_capacity_mt_day * recommended_lines * recommended_shifts
-        recommended_configuration_label = format_configuration(recommended_lines, recommended_shifts)
+        recommended_configuration_label = format_plant_configuration(recommended_lines, recommended_shifts)
         projected_utilization_pct = required_capacity_mt_day / recommended_capacity_mt_day * 100.0 if recommended_capacity_mt_day > 0 else 0.0
         new_plant_required = False
     else:
