@@ -405,9 +405,38 @@ def build_plant_capacity_output(
                     recommended_pair = candidate
         if recommended_pair is not None:
             _, recommended_lines, recommended_shifts = recommended_pair
-    recommended_capacity_mt_day = plant_base_capacity_mt_day * recommended_lines * recommended_shifts
-    recommended_configuration_label = format_configuration(recommended_lines, recommended_shifts)
-    projected_utilization_pct = required_capacity_mt_day / recommended_capacity_mt_day * 100.0 if recommended_capacity_mt_day > 0 else 0.0
+
+    maximum_site_lines = maximum_lines_in_current_plant
+    maximum_site_shifts = maximum_shifts_per_line
+    maximum_site_configuration_label = format_configuration(maximum_site_lines, maximum_site_shifts)
+    current_capacity_shortfall_mt_day = max(0.0, required_capacity_mt_day - current_installed_capacity_mt_day)
+    current_site_capacity_deficit_mt_day = max(0.0, required_capacity_mt_day - maximum_current_plant_capacity_mt_day)
+    capacity_recommendation_mode = (
+        "CURRENT_SITE_OPTIMIZATION"
+        if required_capacity_mt_day <= maximum_current_plant_capacity_mt_day + 1e-9
+        else "NEW_PLANT_EXPANSION"
+    )
+
+    governed_capacity_block_mt_day = max(0.1, plant_base_capacity_mt_day)
+    recommended_new_plant_capacity_mt_day = 0.0
+    total_future_capacity_mt_day = 0.0
+    projected_future_utilization_pct = 0.0
+
+    if capacity_recommendation_mode == "CURRENT_SITE_OPTIMIZATION":
+        recommended_capacity_mt_day = plant_base_capacity_mt_day * recommended_lines * recommended_shifts
+        recommended_configuration_label = format_configuration(recommended_lines, recommended_shifts)
+        projected_utilization_pct = required_capacity_mt_day / recommended_capacity_mt_day * 100.0 if recommended_capacity_mt_day > 0 else 0.0
+        new_plant_required = False
+    else:
+        recommended_lines = maximum_site_lines
+        recommended_shifts = maximum_site_shifts
+        recommended_capacity_mt_day = maximum_current_plant_capacity_mt_day
+        recommended_configuration_label = maximum_site_configuration_label
+        projected_utilization_pct = required_capacity_mt_day / recommended_capacity_mt_day * 100.0 if recommended_capacity_mt_day > 0 else 0.0
+        recommended_new_plant_capacity_mt_day = math.ceil(current_site_capacity_deficit_mt_day / governed_capacity_block_mt_day) * governed_capacity_block_mt_day if current_site_capacity_deficit_mt_day > 0 else 0.0
+        total_future_capacity_mt_day = maximum_current_plant_capacity_mt_day + recommended_new_plant_capacity_mt_day
+        projected_future_utilization_pct = required_capacity_mt_day / total_future_capacity_mt_day * 100.0 if total_future_capacity_mt_day > 0 else 0.0
+        new_plant_required = True
     remaining_shift_capacity_mt_day = max(0.0, shift_only_capacity_mt_day - installed_capacity_mt_day)
     remaining_line_capacity_mt_day = max(0.0, line_only_capacity_mt_day - installed_capacity_mt_day)
     expandable = bool(existing_plant_expandable)
@@ -449,8 +478,15 @@ def build_plant_capacity_output(
         recommended_action = "Build New Plant"
         decision_reason = "Required output exceeds maximum current-site capacity and expandable options are exhausted."
 
-    new_plant_required = recommended_action == "Build New Plant" and required_capacity_mt_day > maximum_current_plant_capacity_mt_day
-    recommended_new_plant_capacity_mt_day = max(0.0, required_capacity_mt_day - maximum_current_plant_capacity_mt_day) if new_plant_required else 0.0
+    if capacity_recommendation_mode == "NEW_PLANT_EXPANSION":
+        expansion_stage = "F. Build new plant"
+        recommended_action = "Build New Plant"
+        decision_reason = (
+            f"Required output exceeds maximum current-site capacity by {current_site_capacity_deficit_mt_day:.1f} MT/day. "
+            f"Current site should operate at {maximum_site_configuration_label} ({maximum_current_plant_capacity_mt_day:.1f} MT/day), "
+            f"then add {recommended_new_plant_capacity_mt_day:.1f} MT/day as new-plant capacity."
+        )
+        supporting_actions = ["Maximize Current Site", "Build New Plant"]
 
     expansion_required = "Yes" if utilization > _to_float(utilization_threshold_pct, 85.0) else "No"
     return {
@@ -466,12 +502,19 @@ def build_plant_capacity_output(
         "current_configuration_label": current_configuration_label,
         "maximum_shifts_per_line": maximum_shifts_per_line,
         "maximum_lines_in_current_plant": maximum_lines_in_current_plant,
+        "maximum_site_lines": maximum_site_lines,
+        "maximum_site_shifts": maximum_site_shifts,
+        "maximum_site_configuration_label": maximum_site_configuration_label,
         "current_installed_capacity_mt_day": current_installed_capacity_mt_day,
         "installed_capacity_mt_day": installed_capacity_mt_day,
         "maximum_current_plant_capacity_mt_day": maximum_current_plant_capacity_mt_day,
         "required_capacity_mt_day": required_capacity_mt_day,
+        "capacity_recommendation_mode": capacity_recommendation_mode,
         "capacity_gap_mt_day": capacity_gap_mt_day,
         "capacity_shortfall_mt_day": capacity_shortfall_mt_day,
+        "current_capacity_shortfall_mt_day": current_capacity_shortfall_mt_day,
+        "current_site_capacity_deficit_mt_day": current_site_capacity_deficit_mt_day,
+        "additional_capacity_required_mt_day": current_site_capacity_deficit_mt_day,
         "capacity_headroom_mt_day": capacity_headroom_mt_day,
         "production_lines_required": best_lines,
         "plant_utilization_pct": utilization,
@@ -482,6 +525,9 @@ def build_plant_capacity_output(
         "recommended_capacity_mt_day": recommended_capacity_mt_day,
         "recommended_configuration_label": recommended_configuration_label,
         "projected_utilization_pct": projected_utilization_pct,
+        "governed_capacity_block_mt_day": governed_capacity_block_mt_day,
+        "total_future_capacity_mt_day": total_future_capacity_mt_day,
+        "projected_future_utilization_pct": projected_future_utilization_pct,
         "shifts_required": current_active_shifts,
         "working_hours_per_shift": _to_float(working_hours_per_shift, 8.0),
         "max_shifts": float(maximum_shifts_per_line),

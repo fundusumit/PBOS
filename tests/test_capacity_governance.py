@@ -112,7 +112,7 @@ class CapacityGovernanceTests(unittest.TestCase):
         )
         self.assertEqual(output["recommended_action"], "Build New Plant")
         self.assertEqual(output["new_plant_required"], "Yes")
-        self.assertAlmostEqual(output["recommended_new_plant_capacity_mt_day"], 35.0, places=3)
+        self.assertAlmostEqual(output["recommended_new_plant_capacity_mt_day"], 40.0, places=3)
 
     def test_e_add_shift_when_shift_can_close_gap(self):
         output = build_plant_capacity_output(
@@ -278,6 +278,94 @@ class CapacityGovernanceTests(unittest.TestCase):
             existing_plant_expandable=False,
         )
         self.assertEqual(output["new_plant_required"], "Yes")
+
+    def test_mode_a_current_capacity_sufficient(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 9.4},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+        )
+        self.assertEqual(output["capacity_recommendation_mode"], "CURRENT_SITE_OPTIMIZATION")
+        self.assertEqual(output["recommended_configuration_label"], "1 line × 1 shift")
+        self.assertEqual(output["new_plant_required"], "No")
+
+    def test_mode_b_current_site_expansion(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 39.1},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+        )
+        self.assertEqual(output["capacity_recommendation_mode"], "CURRENT_SITE_OPTIMIZATION")
+        self.assertEqual(output["recommended_configuration_label"], "2 lines × 2 shifts")
+        self.assertAlmostEqual(output["recommended_capacity_mt_day"], 40.0, places=3)
+        self.assertAlmostEqual(output["projected_utilization_pct"], 97.75, places=2)
+        self.assertEqual(output["new_plant_required"], "No")
+
+    def test_mode_c_maximum_current_site_operation(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 55.0},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+        )
+        self.assertEqual(output["capacity_recommendation_mode"], "CURRENT_SITE_OPTIMIZATION")
+        self.assertEqual(output["recommended_configuration_label"], "2 lines × 3 shifts")
+        self.assertAlmostEqual(output["recommended_capacity_mt_day"], 60.0, places=3)
+        self.assertEqual(output["new_plant_required"], "No")
+
+    def test_mode_d_new_plant_expansion_outputs(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 93.9},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+            existing_plant_expandable=True,
+        )
+        self.assertEqual(output["capacity_recommendation_mode"], "NEW_PLANT_EXPANSION")
+        self.assertEqual(output["maximum_site_configuration_label"], "2 lines × 3 shifts")
+        self.assertAlmostEqual(output["maximum_current_plant_capacity_mt_day"], 60.0, places=3)
+        self.assertAlmostEqual(output["additional_capacity_required_mt_day"], 33.9, places=3)
+        self.assertAlmostEqual(output["recommended_new_plant_capacity_mt_day"], 40.0, places=3)
+        self.assertAlmostEqual(output["total_future_capacity_mt_day"], 100.0, places=3)
+        self.assertAlmostEqual(output["projected_future_utilization_pct"], 93.9, places=1)
+        self.assertEqual(output["new_plant_required"], "Yes")
+
+    def test_mode_e_no_stale_recommended_label_in_new_plant_mode(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 93.9},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+        )
+        self.assertEqual(output["capacity_recommendation_mode"], "NEW_PLANT_EXPANSION")
+        self.assertNotEqual(output["recommended_configuration_label"], "1 line × 1 shift")
+
+    def test_mode_f_card_binding_fields_available(self):
+        output = build_plant_capacity_output(
+            {"finished_goods_mt_day": 93.9},
+            capacity_per_line_mt_day=10.0,
+            max_shifts=3,
+            installed_lines=1,
+            active_shifts=1,
+            maximum_lines_in_current_plant=2,
+        )
+        self.assertEqual(output["capacity_recommendation_mode"], "NEW_PLANT_EXPANSION")
+        self.assertEqual(output["maximum_site_configuration_label"], "2 lines × 3 shifts")
+        self.assertAlmostEqual(output["maximum_current_plant_capacity_mt_day"], 60.0, places=3)
+        self.assertAlmostEqual(output["additional_capacity_required_mt_day"], 33.9, places=3)
+        self.assertAlmostEqual(output["recommended_new_plant_capacity_mt_day"], 40.0, places=3)
 
 
 class PlantNormalizationHotfixTests(unittest.TestCase):
