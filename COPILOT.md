@@ -456,3 +456,50 @@ Current intended behaviour:
 - when operational thresholds are crossed, HC changes;
 - the visible workload must describe operational scale;
 - the calculation engine remains the single authority.
+
+---
+
+## 21. Responsive UI Boundary
+
+For any table or dialog UI fix:
+
+1. trace the active renderer;
+2. patch the active renderer only;
+3. do not create a second parallel renderer;
+4. validate desktop and mobile visible DOM;
+5. prove duplicate visible renderer count is one;
+6. stop after two failed validation attempts.
+
+---
+
+## 22. Display Data Boundary
+
+Calculation fields and display fields must remain separate.
+
+Numeric calculation fields must not be replaced with formatted strings.
+
+Display dataframes must contain type-stable string columns.
+
+Do not use UI formatting to alter business values.
+
+---
+
+## 23. Dialog Content Boundary
+
+Long formulas, explanations and recommendations must wrap inside their container.
+
+No fixed-height cell may truncate text.
+
+No text may cross the dialog border.
+
+---
+
+## 24. Success Evidence
+
+A UI fix is successful only when:
+
+- the exact live dialog is tested;
+- no clipped text remains;
+- no horizontal overflow remains;
+- no duplicate renderer is visible;
+- desktop behavior is preserved.

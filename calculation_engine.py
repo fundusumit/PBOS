@@ -583,6 +583,8 @@ def build_manpower_output(raw_material_output, plant_capacity_output, channel_mi
         workload_display = f"{workload:,.1f}"
         lower_display = f"{selected['lower']:,.1f}"
         upper_display = f"{selected['upper']:,.1f}"
+        current_hc_value = int(current_hc)
+        recommended_hc_value = int(recommended)
         return {
             "current_workload": workload,
             "current_workload_numeric": workload,
@@ -596,8 +598,12 @@ def build_manpower_output(raw_material_output, plant_capacity_output, channel_mi
             "upper_threshold_numeric": selected["upper"],
             "upper_threshold_display": upper_display,
             "threshold_display": selected["label"],
-            "current_hc": current_hc,
-            "recommended_hc": recommended,
+            "current_hc_numeric": current_hc_value,
+            "current_hc_display": f"{current_hc_value:,.0f}",
+            "current_hc": current_hc_value,
+            "recommended_hc_numeric": recommended_hc_value,
+            "recommended_hc_display": f"{recommended_hc_value:,.0f}",
+            "recommended_hc": recommended_hc_value,
             "threshold_status": status,
             "business_reason": reason,
         }
@@ -713,7 +719,11 @@ def build_manpower_output(raw_material_output, plant_capacity_output, channel_mi
             "upper_threshold_display": "Role-specific",
             "threshold_display": "Role-specific",
             "current_hc": sales,
+            "current_hc_numeric": sales,
+            "current_hc_display": f"{sales:,.0f}",
             "recommended_hc": sales,
+            "recommended_hc_numeric": sales,
+            "recommended_hc_display": f"{sales:,.0f}",
             "threshold_status": "Awaiting channel workload alignment",
             "business_reason": "Sales staffing must be aligned to coverage, outlets, distributors, territories or beats, account service load, service frequency, and sales productivity rather than revenue.",
         },
@@ -894,7 +904,11 @@ def align_manpower_sales(manpower_output, channel_sales_output):
         "upper_threshold_numeric": workload_total,
         "upper_threshold_display": "Role-specific",
         "threshold_display": "Role-specific",
+        "current_hc_numeric": int(channel_data.get("sales_current_hc", sales_hc) or sales_hc),
+        "current_hc_display": f"{int(channel_data.get('sales_current_hc', sales_hc) or sales_hc):,.0f}",
         "current_hc": int(channel_data.get("sales_current_hc", sales_hc) or sales_hc),
+        "recommended_hc_numeric": int(channel_data.get("sales_recommended_hc", sales_hc) or sales_hc),
+        "recommended_hc_display": f"{int(channel_data.get('sales_recommended_hc', sales_hc) or sales_hc):,.0f}",
         "recommended_hc": int(channel_data.get("sales_recommended_hc", sales_hc) or sales_hc),
         "threshold_status": "Within Current Staffing Band" if str(channel_data.get("sales_reconciliation_status", "Reconciled")) == "Reconciled" else "Reconciliation Review",
         "business_reason": (

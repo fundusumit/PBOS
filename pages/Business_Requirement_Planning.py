@@ -399,9 +399,93 @@ div[data-testid="stDialog"] .pbos-capacity-panel .pbos-capacity-value {
 }
 .pbos-detail-desktop {
     display: block;
+    width: 100%;
 }
 .pbos-detail-mobile {
     display: none;
+    width: 100%;
+}
+.pbos-responsive-detail {
+    width: 100%;
+    max-width: 100%;
+}
+.pbos-role-detail-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    border: 1px solid #303744;
+    border-radius: 12px;
+    overflow: hidden;
+}
+.pbos-role-detail-table th,
+.pbos-role-detail-table td {
+    padding: 0.72rem 0.8rem;
+    border-bottom: 1px solid #2a303a;
+    vertical-align: top;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    min-width: 0;
+    height: auto;
+    line-height: 1.45;
+}
+.pbos-role-detail-table th:first-child,
+.pbos-role-detail-table td:first-child {
+    width: 38%;
+}
+.pbos-role-detail-table th:last-child,
+.pbos-role-detail-table td:last-child {
+    width: 62%;
+}
+.pbos-role-detail-label {
+    color: #aeb8c7 !important;
+    font-weight: 650;
+}
+.pbos-role-detail-value {
+    color: #f8fafc !important;
+    font-weight: 650;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+.pbos-role-mobile-panel {
+    width: 100%;
+    border: 1px solid #303744;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #11151d;
+}
+.pbos-role-mobile-row {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid #2a303a;
+}
+.pbos-role-mobile-row:last-child {
+    border-bottom: none;
+}
+.pbos-role-mobile-label {
+    color: #aeb8c7 !important;
+    font-size: 0.84rem;
+    font-weight: 700;
+    line-height: 1.35;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+.pbos-role-mobile-value {
+    margin-top: 0.3rem;
+    color: #ffffff !important;
+    font-size: 0.98rem;
+    font-weight: 650;
+    line-height: 1.5;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+.pbos-long-text-block {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 100%;
+    line-height: 1.55;
 }
 .pbos-mobile-panel {
     width: 100%;
@@ -600,11 +684,14 @@ div[data-testid="stDialog"] .pbos-capacity-panel .pbos-capacity-value {
         display: block;
         width: 100%;
     }
-    div[data-testid="stDialog"] [data-testid="stDataFrame"] {
-        display: none !important;
-    }
     div[data-testid="stDialog"] [data-testid="stElementToolbar"] {
         display: none !important;
+    }
+}
+@media (min-width: 769px) {
+    div[data-testid="stDialog"] > div[role="dialog"] {
+        width: min(900px, calc(100vw - 48px)) !important;
+        max-width: min(900px, calc(100vw - 48px)) !important;
     }
 }
 @media (max-width: 600px) {
@@ -652,16 +739,21 @@ def render_staffing_bands_table(staffing_df):
         "Business Reason",
     ]
     display_df = staffing_df[[column for column in columns if column in staffing_df.columns]].copy()
-    display_df["Function"] = display_df["Function"].astype("string")
-    display_df["Current Workload"] = display_df["Current Workload"].astype("string")
-    display_df["Unit"] = display_df["Unit"].astype("string")
-    display_df["Staffing Band"] = display_df["Staffing Band"].astype("string")
-    display_df["Lower Threshold"] = display_df["Lower Threshold"].astype("string")
-    display_df["Upper Threshold"] = display_df["Upper Threshold"].astype("string")
-    display_df["Current HC"] = display_df["Current HC"].astype("string")
-    display_df["Recommended HC"] = display_df["Recommended HC"].astype("string")
-    display_df["Threshold Status"] = display_df["Threshold Status"].astype("string")
-    display_df["Business Reason"] = display_df["Business Reason"].astype("string")
+    display_columns = [
+        "Function",
+        "Current Workload",
+        "Unit",
+        "Staffing Band",
+        "Lower Threshold",
+        "Upper Threshold",
+        "Current HC",
+        "Recommended HC",
+        "Threshold Status",
+        "Business Reason",
+    ]
+    for column in display_columns:
+        if column in display_df.columns:
+            display_df[column] = display_df[column].fillna("").astype(str)
     render_display_dataframe(st, "manpower_staffing_bands_display", display_df, hide_index=True, width="stretch")
 
 
@@ -1055,8 +1147,8 @@ def render_mobile_key_value_panel(title, rows, summary_lines=None, css_class="pb
             + "</div>"
         )
 
-        st.markdown(
-                f"""
+    st.markdown(
+        f"""
 <div class='{escape(wrapper_class)}'>
     <div class='{escape(css_class)}'>
         <div class='pbos-mobile-title'>{escape(str(title))}</div>
@@ -1064,15 +1156,77 @@ def render_mobile_key_value_panel(title, rows, summary_lines=None, css_class="pb
     </div>
     {summary_html}
 </div>
-                """,
-                unsafe_allow_html=True,
-        )
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_responsive_detail_table(table_key, title, detail_df, summary_lines=None):
-    st.markdown("<div class='pbos-detail-desktop'></div>", unsafe_allow_html=True)
-    render_display_dataframe(st, table_key, detail_df, hide_index=True, width="stretch")
-    render_mobile_key_value_panel(title, _mobile_rows_from_dataframe(detail_df), summary_lines=summary_lines)
+    safe_df = detail_df.copy() if detail_df is not None else pd.DataFrame()
+    if safe_df.empty:
+        safe_df = pd.DataFrame([{"Item": "No data", "Value": ""}])
+    safe_df = safe_df.fillna("")
+    for col in safe_df.columns:
+        safe_df[col] = safe_df[col].astype(str)
+
+    columns = list(safe_df.columns)
+    label_col = columns[0] if columns else "Item"
+
+    desktop_rows = []
+    for _, row in safe_df.iterrows():
+        label = str(row.get(label_col, ""))
+        if len(columns) == 1:
+            value = ""
+        elif len(columns) == 2:
+            value = str(row.get(columns[1], ""))
+        else:
+            value = " | ".join(f"{col}: {row.get(col, '')}" for col in columns[1:])
+        desktop_rows.append(
+            "<tr>"
+            f"<td class='pbos-role-detail-label'>{escape(label)}</td>"
+            f"<td class='pbos-role-detail-value'>{escape(value)}</td>"
+            "</tr>"
+        )
+
+    mobile_rows = "".join(
+        (
+            "<div class='pbos-role-mobile-row'>"
+            f"<div class='pbos-role-mobile-label'>{escape(str(label))}</div>"
+            f"<div class='pbos-role-mobile-value'>{escape(str(value))}</div>"
+            "</div>"
+        )
+        for label, value in _mobile_rows_from_dataframe(safe_df)
+    )
+
+    summary_html = ""
+    if summary_lines:
+        rendered = [escape(str(line)) for line in summary_lines if str(line).strip()]
+        if rendered:
+            summary_html = f"<div class='pbos-long-text-block'>{'<br>'.join(rendered)}</div>"
+
+    st.markdown(
+        f"""
+<div id='{escape(table_key)}' class='pbos-responsive-detail'>
+  <div class='pbos-detail-desktop'>
+    <table class='pbos-role-detail-table'>
+      <thead>
+        <tr><th>Item</th><th>Value</th></tr>
+      </thead>
+      <tbody>
+        {''.join(desktop_rows)}
+      </tbody>
+    </table>
+  </div>
+  <div class='pbos-detail-mobile'>
+    <div class='pbos-role-mobile-panel'>
+      {mobile_rows}
+    </div>
+  </div>
+  {summary_html}
+</div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _recommended_action_subtitle(output):
@@ -3963,18 +4117,24 @@ if manpower_output.get("staffing_bands"):
     for function_name, band in manpower_output["staffing_bands"].items():
         current_workload_numeric = float(band.get("current_workload_numeric", band.get("current_workload", 0.0)) or 0.0)
         current_workload_display = band.get("current_workload_display")
-        if current_workload_display is None:
+        if current_workload_display is None or str(current_workload_display).strip() == "":
             current_workload_display = f"{current_workload_numeric:,.1f}"
         lower_threshold_numeric = float(band.get("lower_threshold_numeric", band.get("lower_threshold", 0.0)) or 0.0)
         lower_threshold_display = band.get("lower_threshold_display")
-        if lower_threshold_display is None:
+        if lower_threshold_display is None or str(lower_threshold_display).strip() == "":
             lower_threshold_display = f"{lower_threshold_numeric:,.1f}"
         upper_threshold_numeric = float(band.get("upper_threshold_numeric", band.get("upper_threshold", 0.0)) or 0.0)
         upper_threshold_display = band.get("upper_threshold_display")
-        if upper_threshold_display is None:
+        if upper_threshold_display is None or str(upper_threshold_display).strip() == "":
             upper_threshold_display = f"{upper_threshold_numeric:,.1f}"
-        current_hc_numeric = int(band.get("current_hc", 0) or 0)
-        recommended_hc_numeric = int(band.get("recommended_hc", 0) or 0)
+        current_hc_numeric = int(band.get("current_hc_numeric", band.get("current_hc", 0)) or 0)
+        recommended_hc_numeric = int(band.get("recommended_hc_numeric", band.get("recommended_hc", 0)) or 0)
+        current_hc_display = band.get("current_hc_display")
+        if current_hc_display is None or str(current_hc_display).strip() == "":
+            current_hc_display = f"{current_hc_numeric:,.0f}"
+        recommended_hc_display = band.get("recommended_hc_display")
+        if recommended_hc_display is None or str(recommended_hc_display).strip() == "":
+            recommended_hc_display = f"{recommended_hc_numeric:,.0f}"
         workload_unit = band.get("workload_unit", "")
         staffing_band = band.get("current_staffing_band", "")
         business_reason = band.get("business_reason", "")
@@ -3990,9 +4150,9 @@ if manpower_output.get("staffing_bands"):
             "Upper Threshold": upper_threshold_display,
             "Threshold Display": band.get("threshold_display", ""),
             "Current HC Numeric": current_hc_numeric,
-            "Current HC": f"{current_hc_numeric:,.0f}",
+            "Current HC": current_hc_display,
             "Recommended HC Numeric": recommended_hc_numeric,
-            "Recommended HC": f"{recommended_hc_numeric:,.0f}",
+            "Recommended HC": recommended_hc_display,
             "Threshold Status": band.get("threshold_status", ""),
             "Business Reason": business_reason,
         }
