@@ -1101,7 +1101,7 @@ def _mobile_rows_from_dataframe(detail_df):
     return rows
 
 
-def render_mobile_key_value_panel(title, rows, summary_lines=None, css_class="pbos-mobile-panel"):
+def render_mobile_key_value_panel(title, rows, summary_lines=None, css_class="pbos-mobile-panel", wrapper_class="pbos-detail-mobile"):
     row_html = "".join(
         (
             "<div class='pbos-mobile-row'>"
@@ -1121,7 +1121,7 @@ def render_mobile_key_value_panel(title, rows, summary_lines=None, css_class="pb
 
     st.markdown(
         f"""
-        <div class='pbos-detail-mobile'>
+                <div class='{escape(wrapper_class)}'>
           <div class='{escape(css_class)}'>
             <div class='pbos-mobile-title'>{escape(str(title))}</div>
             {row_html}
@@ -3586,16 +3586,19 @@ st.markdown("<div class='pbos-section-card'>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-title'>Commercial & Distribution Planning</div>", unsafe_allow_html=True)
 st.markdown("<div class='pbos-section-subtitle'>Portfolio-wise route-to-market, distribution capacity and commercial coverage.</div>", unsafe_allow_html=True)
 product_revenue_tolerance = 0.01
-st.markdown("<div class='pbos-section-title' style='font-size:0.94rem; margin-top:6px;'>Product Revenue Reconciliation</div>", unsafe_allow_html=True)
-render_responsive_detail_table("product_revenue_reconciliation", "Product Revenue Reconciliation", pd.DataFrame([
-    {"Metric": "Corporate Revenue Target", "Value": fmt_currency(corporate_revenue_rupees)},
-    {"Metric": "Fresh Chilled", "Value": fmt_currency(distributor_output["fresh_chilled_revenue"])},
-    {"Metric": "Frozen Raw", "Value": fmt_currency(distributor_output["frozen_raw_revenue"])},
-    {"Metric": "Ready To Eat", "Value": fmt_currency(distributor_output["rte_revenue"])},
-    {"Metric": "Further Value Added", "Value": fmt_currency(distributor_output["fva_revenue"])},
-    {"Metric": "Total Product Revenue", "Value": fmt_currency(distributor_output["total_product_revenue"])},
-    {"Metric": "Reconciliation Status", "Value": "Reconciled" if distributor_output["product_revenue_reconciled"] else "Not Reconciled"},
-]))
+render_mobile_key_value_panel(
+    "Product Revenue Reconciliation",
+    [
+        ("Corporate Revenue Target", fmt_currency(corporate_revenue_rupees)),
+        ("Fresh Chilled", fmt_currency(distributor_output["fresh_chilled_revenue"])),
+        ("Frozen Raw", fmt_currency(distributor_output["frozen_raw_revenue"])),
+        ("Ready To Eat", fmt_currency(distributor_output["rte_revenue"])),
+        ("Further Value Added", fmt_currency(distributor_output["fva_revenue"])),
+        ("Total Product Revenue", fmt_currency(distributor_output["total_product_revenue"])),
+        ("Reconciliation Status", "Reconciled" if distributor_output["product_revenue_reconciled"] else "Not Reconciled"),
+    ],
+    wrapper_class="pbos-product-reconciliation-panel",
+)
 if abs(distributor_output["product_revenue_variance"]) > product_revenue_tolerance:
     st.warning(f"Product revenue allocation differs from corporate revenue target by {fmt_currency(abs(distributor_output['product_revenue_variance']))}.")
 
