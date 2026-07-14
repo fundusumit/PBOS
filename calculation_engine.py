@@ -23,6 +23,19 @@ def _to_float(value, default=0.0):
         return default
 
 
+def _normalize_mapping(value):
+    if value is None:
+        return {}
+    if isinstance(value, pd.Series):
+        return value.to_dict()
+    if isinstance(value, dict):
+        return value
+    if hasattr(value, "to_dict"):
+        converted = value.to_dict()
+        return converted if isinstance(converted, dict) else {}
+    return {}
+
+
 def _coerce_percent(value):
     value = _to_float(value, 0.0)
     return value / 100.0 if value > 1 else value
@@ -306,12 +319,15 @@ def build_plant_capacity_output(
     review_utilization_pct = _to_float(review_utilization_pct, 90.0)
     critical_utilization_pct = _to_float(critical_utilization_pct, 95.0)
 
-    if installed_lines is None or _to_float(installed_lines, 0.0) <= 0:
+    installed_lines_provided = installed_lines is not None and _to_float(installed_lines, 0.0) > 0
+    active_shifts_provided = active_shifts is not None and _to_float(active_shifts, 0.0) > 0
+
+    if not installed_lines_provided:
         installed_lines_candidate = 1
     else:
         installed_lines_candidate = max(1, int(round(_to_float(installed_lines, 1.0))))
 
-    if active_shifts is None or _to_float(active_shifts, 0.0) <= 0:
+    if not active_shifts_provided:
         active_shifts_candidate = 1
     else:
         active_shifts_candidate = max(1, int(round(_to_float(active_shifts, 1.0))))
@@ -325,7 +341,7 @@ def build_plant_capacity_output(
     best_lines = installed_lines_candidate
     best_shifts = active_shifts_candidate
     best_capacity = plant_base_capacity_mt_day * best_lines * best_shifts
-    if required_capacity_mt_day > 0:
+    if required_capacity_mt_day > 0 and not (installed_lines_provided and active_shifts_provided):
         best_pair = None
         for lines in range(1, maximum_lines_in_current_plant + 1):
             for shifts in range(1, maximum_shifts_per_line + 1):
@@ -1550,14 +1566,37 @@ def build_plant_planning(plant=None, assigned_markets=None, product_mix=None, ch
                 break
     if assigned_revenue <= 0:
         assigned_revenue = _to_float((stage_profile or {}).get("revenue_rupees", 60000000.0) if isinstance(stage_profile, dict) else 60000000.0, 60000000.0)
-    line_capacity_mt_day = _to_float((plant or {}).get("line_capacity_mt_day", plant_capacity_per_line_mt_day), plant_capacity_per_line_mt_day)
-    maximum_shifts_per_line = max(1, int(round(_to_float((plant or {}).get("maximum_shifts", max_shifts), max_shifts))))
-    installed_capacity_mt_day = _to_float((plant or {}).get("installed_capacity_mt_day", line_capacity_mt_day), line_capacity_mt_day)
-    configured_installed_lines = max(1, int(round(installed_capacity_mt_day / max(0.1, line_capacity_mt_day))))
-    configured_active_shifts = max(1, int(round(_to_float((plant or {}).get("active_shifts", 1), 1))))
-    max_lines_raw = (plant or {}).get("maximum_lines_in_current_plant", (plant or {}).get("max_lines_in_current_plant", None))
-    maximum_lines_in_current_plant = max(configured_installed_lines + 1, configured_installed_lines if max_lines_raw is None else int(round(_to_float(max_lines_raw, configured_installed_lines + 1))))
-    expandable_flag = str((plant or {}).get("existing_plant_expandable", "Yes")).strip().lower() not in {"no", "false", "0"}
+    plant_data = _normalize_mapping(plant)
+
+    raw_line_capacity = plant_data.get("line_capacity_mt_day", plant_data.get("base_capacity_per_line", plant_capacity_per_line_mt_day))
+    line_capacity_mt_day = _to_float(raw_line_capacity, plant_capacity_per_line_mt_day)
+
+    raw_maximum_shifts = plant_data.get("maximum_shifts_per_line", plant_data.get("maximum_shifts", max_shifts))
+    maximum_shifts_per_line = max(1, int(round(_to_float(raw_maximum_shifts, max_shifts))))
+
+    raw_current_installed_capacity = plant_data.get(
+        "current_installed_capacity_mt_day",
+        plant_data.get("installed_capacity_mt_day", line_capacity_mt_day),
+    )
+    current_installed_capacity_mt_day = _to_float(raw_current_installed_capacity, line_capacity_mt_day)
+
+    raw_installed_lines = plant_data.get("installed_lines", None)
+    if raw_installed_lines is None:
+        configured_installed_lines = max(1, int(round(current_installed_capacity_mt_day / max(0.1, line_capacity_mt_day))))
+    else:
+        configured_installed_lines = max(1, int(round(_to_float(raw_installed_lines, 1.0))))
+
+    raw_active_shifts = plant_data.get("active_shifts", 1)
+    configured_active_shifts = max(1, int(round(_to_float(raw_active_shifts, 1.0))))
+
+    raw_maximum_lines = plant_data.get("maximum_lines_in_current_plant", plant_data.get("max_lines_in_current_plant", None))
+    if raw_maximum_lines is None:
+        maximum_lines_in_current_plant = max(configured_installed_lines + 1, configured_installed_lines)
+    else:
+        maximum_lines_in_current_plant = max(configured_installed_lines, int(round(_to_float(raw_maximum_lines, configured_installed_lines + 1))))
+
+    raw_site_expandable = plant_data.get("site_expandable", plant_data.get("existing_plant_expandable", "Yes"))
+    expandable_flag = str(raw_site_expandable).strip().lower() not in {"no", "false", "0"}
 
     result = build_financial_chain(product_mix, channel_mix, product_registry, channel_registry, pricing_registry, cost_registry, assigned_revenue, avg_bird_weight, working_days, stage_profile, live_bird_rate=live_bird_rate, yield_pct=yield_pct, plant_capacity_per_line_mt_day=line_capacity_mt_day, working_hours_per_shift=working_hours_per_shift, max_shifts=maximum_shifts_per_line, cold_storage_buffer_days=cold_storage_buffer_days, utilization_threshold_pct=utilization_threshold_pct, operating_model=operating_model, business_stage=business_stage, procurement_drivers=procurement_drivers, mortality_pct=mortality_pct, processing_loss_pct=processing_loss_pct, gt_distributor_margin_pct=gt_distributor_margin_pct, packaging_cost_per_kg=packaging_cost_per_kg, transport_cost_per_kg=transport_cost_per_kg, trader_margin_pct=trader_margin_pct, farm_margin_pct=farm_margin_pct)
     result["plant_capacity_output"] = build_plant_capacity_output(

@@ -1,6 +1,8 @@
 import unittest
 
-from calculation_engine import build_plant_capacity_output
+import pandas as pd
+
+from calculation_engine import build_plant_capacity_output, build_plant_planning
 
 
 class CapacityGovernanceTests(unittest.TestCase):
@@ -76,6 +78,86 @@ class CapacityGovernanceTests(unittest.TestCase):
             existing_plant_expandable=False,
         )
         self.assertEqual(output["recommended_action"], "Add Production Line")
+
+
+class PlantNormalizationHotfixTests(unittest.TestCase):
+    def setUp(self):
+        self.assigned_markets = pd.DataFrame([
+            {
+                "city": "Kolkata",
+                "revenue_allocation_cr": 10.0,
+                "assigned_plant_id": "PLANT_KOL",
+            }
+        ])
+
+    def test_a_dict_input_runs(self):
+        plant = {
+            "line_capacity_mt_day": 10,
+            "installed_lines": 2,
+            "active_shifts": 2,
+            "maximum_shifts": 3,
+            "installed_capacity_mt_day": 40,
+            "maximum_lines_in_current_plant": 3,
+            "existing_plant_expandable": "Yes",
+        }
+        result = build_plant_planning(plant=plant, assigned_markets=self.assigned_markets)
+        self.assertIn("plant_capacity_output", result)
+
+    def test_b_series_input_runs(self):
+        plant = pd.Series(
+            {
+                "line_capacity_mt_day": 10,
+                "installed_lines": 2,
+                "active_shifts": 2,
+                "maximum_shifts": 3,
+                "installed_capacity_mt_day": 40,
+                "maximum_lines_in_current_plant": 3,
+                "existing_plant_expandable": "Yes",
+            }
+        )
+        result = build_plant_planning(plant=plant, assigned_markets=self.assigned_markets)
+        self.assertIn("plant_capacity_output", result)
+
+    def test_c_none_input_runs(self):
+        result = build_plant_planning(plant=None, assigned_markets=self.assigned_markets)
+        self.assertIn("plant_capacity_output", result)
+
+    def test_d_expected_capacity_40_mt_day(self):
+        plant = pd.Series(
+            {
+                "line_capacity_mt_day": 10,
+                "installed_lines": 2,
+                "active_shifts": 2,
+                "maximum_shifts": 3,
+                "installed_capacity_mt_day": 40,
+                "maximum_lines_in_current_plant": 4,
+                "existing_plant_expandable": "Yes",
+            }
+        )
+        result = build_plant_planning(plant=plant, assigned_markets=self.assigned_markets)
+        output = result["plant_capacity_output"]
+        self.assertAlmostEqual(output["installed_capacity_mt_day"], 40.0, places=3)
+
+    def test_e_cloud_call_style_no_series_truth_error(self):
+        plant = pd.Series(
+            {
+                "plant_id": "PLANT_KOL",
+                "line_capacity_mt_day": 10,
+                "installed_capacity_mt_day": 10,
+                "maximum_shifts": 3,
+                "existing_plant_expandable": "Yes",
+            }
+        )
+        try:
+            result = build_plant_planning(
+                plant=plant,
+                assigned_markets=self.assigned_markets,
+                product_mix={"FRESH": 40, "FROZEN": 30, "RTE": 15, "FVA": 15},
+                channel_mix={"GT": 40, "MT": 20, "QC": 10, "ECOM": 10, "HORECA": 15, "INST": 3, "EXP": 2},
+            )
+        except ValueError as exc:
+            self.fail(f"Unexpected ValueError from Series truth evaluation: {exc}")
+        self.assertIn("plant_capacity_output", result)
 
 
 if __name__ == "__main__":
