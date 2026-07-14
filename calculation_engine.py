@@ -905,6 +905,12 @@ def align_manpower_sales(manpower_output, channel_sales_output):
         "context_complexity": complexity,
         "context_productivity": productivity,
     })
+    aligned["sales_operational_workload_score"] = workload_total
+    aligned["sales_operational_workload_display"] = sales_band.get("current_workload_display", "No active commercial workload configured")
+    aligned["sales_current_hc"] = int(sales_band.get("current_hc", sales_hc) or sales_hc)
+    aligned["sales_recommended_hc"] = int(sales_band.get("recommended_hc", sales_hc) or sales_hc)
+    aligned["sales_threshold_status"] = sales_band.get("threshold_status", "Within Current Staffing Band")
+    aligned["sales_business_reason"] = sales_band.get("business_reason", "")
     staffing_bands["sales"] = sales_band
     aligned["staffing_bands"] = staffing_bands
     total_keys = ["production", "warehouse", "sales", "marketing", "finance", "hr", "admin", "qa_food_safety", "procurement"]

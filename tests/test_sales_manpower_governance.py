@@ -113,7 +113,40 @@ class SalesManpowerGovernanceTests(unittest.TestCase):
         self.assertEqual(role_sum, int(out.get("total_commercial_hc", 0) or 0))
         self.assertEqual(out.get("sales_reconciliation_status"), "Reconciled")
 
-    def test_g_no_page_level_sales_row_override(self):
+    def test_g_visible_row_scenarios_2_3_15_follow_coverage_and_steps(self):
+        base = {
+            "channel_mix": self._base_channel_mix(),
+            "sales_productivity_factor": 1.0,
+            "digital_enablement_factor": 1.0,
+            "distributor_self_service_factor": 1.0,
+            "sales_automation_factor": 1.0,
+        }
+        out_2 = build_channel_sales_output(market_revenue=20000000.0, **base)
+        out_3 = build_channel_sales_output(market_revenue=30000000.0, **base)
+        out_15 = build_channel_sales_output(market_revenue=150000000.0, **base)
+
+        band_2 = self._aligned_sales_band(out_2)
+        band_3 = self._aligned_sales_band(out_3)
+        band_15 = self._aligned_sales_band(out_15)
+
+        self.assertNotIn("20,000,000", band_2["current_workload_display"])
+        self.assertNotIn("30,000,000", band_3["current_workload_display"])
+        self.assertEqual("coverage workload", band_2["workload_unit"])
+        self.assertGreater(out_15["sales_operational_workload_score"], out_2["sales_operational_workload_score"])
+        self.assertGreater(band_15["recommended_hc"], band_2["recommended_hc"])
+        self.assertNotEqual(band_2["recommended_hc"], band_3["recommended_hc"] * (2 / 3))
+
+    def test_h_aligned_top_level_sales_fields_match_staffing_band(self):
+        out = build_channel_sales_output(market_revenue=20000000.0, **self._explicit_workload_kwargs())
+        aligned = align_manpower_sales({"sales": 0, "staffing_bands": {"sales": {}}}, out)
+        band = aligned["staffing_bands"]["sales"]
+
+        self.assertEqual(aligned["sales_operational_workload_display"], band["current_workload_display"])
+        self.assertEqual(aligned["sales_recommended_hc"], band["recommended_hc"])
+        self.assertEqual(aligned["sales_current_hc"], band["current_hc"])
+        self.assertEqual(aligned["sales_threshold_status"], band["threshold_status"])
+
+    def test_i_no_page_level_sales_row_override(self):
         page_file = pathlib.Path(__file__).resolve().parents[1] / "pages" / "Business_Requirement_Planning.py"
         content = page_file.read_text(encoding="utf-8").lower()
         self.assertNotIn('if function_name == "sales"', content)
