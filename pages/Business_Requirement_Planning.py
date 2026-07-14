@@ -652,11 +652,16 @@ def render_staffing_bands_table(staffing_df):
         "Business Reason",
     ]
     display_df = staffing_df[[column for column in columns if column in staffing_df.columns]].copy()
+    display_df["Function"] = display_df["Function"].astype("string")
     display_df["Current Workload"] = display_df["Current Workload"].astype("string")
+    display_df["Unit"] = display_df["Unit"].astype("string")
+    display_df["Staffing Band"] = display_df["Staffing Band"].astype("string")
     display_df["Lower Threshold"] = display_df["Lower Threshold"].astype("string")
     display_df["Upper Threshold"] = display_df["Upper Threshold"].astype("string")
     display_df["Current HC"] = display_df["Current HC"].astype("string")
     display_df["Recommended HC"] = display_df["Recommended HC"].astype("string")
+    display_df["Threshold Status"] = display_df["Threshold Status"].astype("string")
+    display_df["Business Reason"] = display_df["Business Reason"].astype("string")
     render_display_dataframe(st, "manpower_staffing_bands_display", display_df, hide_index=True, width="stretch")
 
 
@@ -3970,141 +3975,23 @@ with colm10:
 if manpower_output.get("staffing_bands"):
     staffing_rows = []
     for function_name, band in manpower_output["staffing_bands"].items():
-        if function_name == "sales":
-            general_trade = channel_sales_output.get("general_trade", {}) or {}
-            modern_trade = channel_sales_output.get("modern_trade", {}) or {}
-            quick_commerce = channel_sales_output.get("quick_commerce", {}) or {}
-            horeca = channel_sales_output.get("horeca", {}) or {}
-            institution = channel_sales_output.get("institutional_government", channel_sales_output.get("institution", {})) or {}
-            exports = channel_sales_output.get("exports", {}) or {}
-            sales_workload_parts = []
-            current_workload_numeric = 0.0
-
-            gt_outlets = 400 if float(general_trade.get("revenue", 0.0) or 0.0) > 0 else 0
-            gt_distributors = 6 if gt_outlets > 0 else 0
-            gt_beats = max(1, math.ceil(gt_outlets / max(1.0, float(calls_per_sales_executive_day or 12) * 6.0))) if gt_outlets > 0 else 0
-            if gt_outlets:
-                current_workload_numeric += gt_outlets
-                sales_workload_parts.append(f"{gt_outlets:,.0f} outlets")
-            if gt_distributors:
-                current_workload_numeric += gt_distributors
-                sales_workload_parts.append(f"{gt_distributors:,.0f} distributors")
-            if gt_beats:
-                current_workload_numeric += gt_beats
-                sales_workload_parts.append(f"{gt_beats:,.0f} beats")
-
-            mt_accounts = 7 if float(modern_trade.get("revenue", 0.0) or 0.0) > 0 else 0
-            if mt_accounts:
-                current_workload_numeric += mt_accounts
-                sales_workload_parts.append(f"{mt_accounts:,.0f} MT accounts")
-
-            qcom_accounts = 2 if float(quick_commerce.get("revenue", 0.0) or 0.0) > 0 else 0
-            if qcom_accounts:
-                current_workload_numeric += qcom_accounts
-                sales_workload_parts.append(f"{qcom_accounts:,.0f} QCom accounts")
-
-            horeca_accounts = int(float(horeca.get("active_accounts", horeca.get("accounts", 0)) or 0.0))
-            if horeca_accounts:
-                current_workload_numeric += horeca_accounts
-                sales_workload_parts.append(f"{horeca_accounts:,.0f} HoReCa accounts")
-
-            institution_tenders = 1 if float(institution.get("revenue", institution.get("planned_revenue", 0.0)) or 0.0) > 0 else 0
-            if institution_tenders:
-                current_workload_numeric += institution_tenders
-                tender_label = "tender" if institution_tenders == 1 else "tenders"
-                sales_workload_parts.append(f"{institution_tenders:,.0f} institutional {tender_label}")
-
-            exports_buyers = 2 if float(exports.get("revenue", 0.0) or 0.0) > 0 else 0
-            exports_markets = 1 if exports_buyers > 0 else 0
-            exports_scope = exports_buyers if exports_buyers > 0 else exports_markets
-            if exports_scope:
-                current_workload_numeric += exports_scope
-                export_label = "buyers" if exports_buyers > 0 else "markets"
-                sales_workload_parts.append(f"{exports_scope:,.0f} export {export_label}")
-
-            active_channel_count = sum(
-                1
-                for is_active in [
-                    gt_outlets > 0 or gt_distributors > 0 or gt_beats > 0,
-                    mt_accounts > 0,
-                    qcom_accounts > 0,
-                    horeca_accounts > 0,
-                    institution_tenders > 0,
-                    exports_scope > 0,
-                ]
-                if is_active
-            )
-            if active_channel_count:
-                current_workload_numeric += active_channel_count
-                sales_workload_parts.append(f"{active_channel_count:,.0f} active {'channel' if active_channel_count == 1 else 'channels'}")
-
-            current_workload_display = " | ".join(sales_workload_parts) if sales_workload_parts else "No active commercial workload configured"
-            gt_exec_capacity = max(1.0, float(general_trade.get("effective_outlets_per_sales_executive", gt_outlets_per_sales_executive or 50) or 50.0))
-            gt_manager_capacity = max(1.0, float(general_trade.get("effective_distributors_per_manager", 8.0) or 8.0))
-            mt_capacity = max(1.0, float(modern_trade.get("accounts_per_kam", 4.0) or 4.0))
-            qcom_capacity = max(1.0, float(quick_commerce.get("accounts_per_kam", 3.0) or 3.0))
-            horeca_capacity = max(1.0, float(horeca.get("accounts_per_manager", 4.0) or 4.0))
-            institution_capacity = max(1.0, float(institution.get("tenders_per_manager", 4.0) or 4.0))
-            exports_capacity = max(1.0, float(exports.get("buyers_per_manager", 3.0) or 3.0))
-            effective_capacity_multiplier = max(0.5, float(channel_sales_output.get("effective_capacity_multiplier", 1.0) or 1.0))
-
-            gt_sales_executives = int(math.ceil(gt_outlets / gt_exec_capacity)) if gt_outlets > 0 else 0
-            gt_distributor_managers = int(math.ceil(gt_distributors / gt_manager_capacity)) if gt_distributors > 0 else 0
-            mt_hc = int(math.ceil(mt_accounts / mt_capacity)) if mt_accounts > 0 else 0
-            qcom_regions = max(1, math.ceil(qcom_accounts / 2.0)) if qcom_accounts > 0 else 0
-            qcom_weighted_workload = qcom_accounts + 0.5 * qcom_regions + 0.05 * (qcom_regions * 12 if qcom_regions > 0 else 0)
-            qcom_hc = int(math.ceil(qcom_weighted_workload / qcom_capacity)) if qcom_weighted_workload > 0 else 0
-            horeca_hc = int(math.ceil(horeca_accounts / horeca_capacity)) if horeca_accounts > 0 else 0
-            institution_hc = int(math.ceil(institution_tenders / institution_capacity)) if institution_tenders > 0 else 0
-            exports_weighted_workload = exports_buyers + 0.5 * exports_markets
-            exports_hc = int(math.ceil(exports_weighted_workload / exports_capacity)) if exports_weighted_workload > 0 else 0
-            frontline_hc = gt_sales_executives + mt_hc + qcom_hc + horeca_hc + institution_hc + exports_hc
-            sales_manager_hc = 1 if active_channel_count > 0 else 0
-            total_active_accounts_supported = gt_outlets + mt_accounts + qcom_accounts + horeca_accounts + institution_tenders + exports_buyers
-            sales_coordinator_hc = 1 if (total_active_accounts_supported >= 40 or frontline_hc >= 8) else 0
-            leadership_capacity = max(1.0, 6.0 * effective_capacity_multiplier)
-            channel_leadership_hc = int(math.ceil(frontline_hc / leadership_capacity)) if frontline_hc > 10 else 0
-            lower_threshold_numeric = 0.0
-            lower_threshold_display = "Role-specific"
-            upper_threshold_numeric = current_workload_numeric
-            upper_threshold_display = "Role-specific"
-            recommended_hc_numeric = (
-                sales_manager_hc
-                + gt_sales_executives
-                + gt_distributor_managers
-                + mt_hc
-                + qcom_hc
-                + horeca_hc
-                + institution_hc
-                + exports_hc
-                + sales_coordinator_hc
-                + channel_leadership_hc
-            )
-            current_hc_numeric = recommended_hc_numeric
-            workload_unit = "coverage workload"
-            staffing_band = "role productivity capacity"
-            business_reason = (
-                "Sales staffing is governed by outlets, distributors, territories or beats, channel accounts, service frequency, "
-                "export coverage, and governed productivity. Revenue remains contextual only."
-            )
-        else:
-            current_workload_numeric = float(band.get("current_workload_numeric", band.get("current_workload", 0.0)) or 0.0)
-            current_workload_display = band.get("current_workload_display")
-            if current_workload_display is None:
-                current_workload_display = f"{current_workload_numeric:,.1f}"
-            lower_threshold_numeric = float(band.get("lower_threshold_numeric", band.get("lower_threshold", 0.0)) or 0.0)
-            lower_threshold_display = band.get("lower_threshold_display")
-            if lower_threshold_display is None:
-                lower_threshold_display = f"{lower_threshold_numeric:,.1f}"
-            upper_threshold_numeric = float(band.get("upper_threshold_numeric", band.get("upper_threshold", 0.0)) or 0.0)
-            upper_threshold_display = band.get("upper_threshold_display")
-            if upper_threshold_display is None:
-                upper_threshold_display = f"{upper_threshold_numeric:,.1f}"
-            current_hc_numeric = int(band.get("current_hc", 0) or 0)
-            recommended_hc_numeric = int(band.get("recommended_hc", 0) or 0)
-            workload_unit = band.get("workload_unit", "")
-            staffing_band = band.get("current_staffing_band", "")
-            business_reason = band.get("business_reason", "")
+        current_workload_numeric = float(band.get("current_workload_numeric", band.get("current_workload", 0.0)) or 0.0)
+        current_workload_display = band.get("current_workload_display")
+        if current_workload_display is None:
+            current_workload_display = f"{current_workload_numeric:,.1f}"
+        lower_threshold_numeric = float(band.get("lower_threshold_numeric", band.get("lower_threshold", 0.0)) or 0.0)
+        lower_threshold_display = band.get("lower_threshold_display")
+        if lower_threshold_display is None:
+            lower_threshold_display = f"{lower_threshold_numeric:,.1f}"
+        upper_threshold_numeric = float(band.get("upper_threshold_numeric", band.get("upper_threshold", 0.0)) or 0.0)
+        upper_threshold_display = band.get("upper_threshold_display")
+        if upper_threshold_display is None:
+            upper_threshold_display = f"{upper_threshold_numeric:,.1f}"
+        current_hc_numeric = int(band.get("current_hc", 0) or 0)
+        recommended_hc_numeric = int(band.get("recommended_hc", 0) or 0)
+        workload_unit = band.get("workload_unit", "")
+        staffing_band = band.get("current_staffing_band", "")
+        business_reason = band.get("business_reason", "")
         staffing_row = {
             "Function": function_name.replace("_", " ").title(),
             "Current Workload Numeric": current_workload_numeric,

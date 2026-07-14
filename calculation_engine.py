@@ -756,6 +756,45 @@ def align_manpower_sales(manpower_output, channel_sales_output):
     channel_data = _normalize_mapping(channel_sales_output)
 
     def _sales_workload_metrics():
+        workload_obj = _normalize_mapping(channel_data.get("sales_workload"))
+        if workload_obj:
+            gt_outlets = int(_to_float(workload_obj.get("gt_target_outlets", 0), 0.0))
+            gt_distributors = int(_to_float(workload_obj.get("gt_distributors", 0), 0.0))
+            gt_beats = int(_to_float(workload_obj.get("gt_territories_or_beats", 0), 0.0))
+            mt_accounts = int(_to_float(workload_obj.get("mt_active_accounts", 0), 0.0))
+            qcom_accounts = int(_to_float(workload_obj.get("qcom_buying_accounts", 0), 0.0))
+            horeca_accounts = int(_to_float(workload_obj.get("horeca_active_accounts", 0), 0.0))
+            institution_tenders = int(_to_float(workload_obj.get("institutional_active_tenders", 0), 0.0))
+            exports_buyers = int(_to_float(workload_obj.get("export_active_buyers", 0), 0.0))
+            exports_markets = int(_to_float(workload_obj.get("export_active_markets", 0), 0.0))
+            active_channel_count = int(_to_float(workload_obj.get("active_channel_count", 0), 0.0))
+            exports_scope = exports_buyers if exports_buyers > 0 else exports_markets
+            parts = []
+            if gt_outlets:
+                parts.append(f"{gt_outlets:,.0f} outlets")
+            if gt_distributors:
+                parts.append(f"{gt_distributors:,.0f} distributors")
+            if gt_beats:
+                parts.append(f"{gt_beats:,.0f} beats")
+            if mt_accounts:
+                parts.append(f"{mt_accounts:,.0f} MT accounts")
+            if qcom_accounts:
+                parts.append(f"{qcom_accounts:,.0f} QCom accounts")
+            if horeca_accounts:
+                parts.append(f"{horeca_accounts:,.0f} HoReCa accounts")
+            if institution_tenders:
+                parts.append(f"{institution_tenders:,.0f} institutional {'tender' if institution_tenders == 1 else 'tenders'}")
+            if exports_scope:
+                parts.append(f"{exports_scope:,.0f} export {'buyers' if exports_buyers > 0 else 'markets'}")
+            if active_channel_count:
+                parts.append(f"{active_channel_count:,.0f} active {'channel' if active_channel_count == 1 else 'channels'}")
+            score = float(gt_outlets + gt_distributors + gt_beats + mt_accounts + qcom_accounts + horeca_accounts + institution_tenders + exports_scope + active_channel_count)
+            return {
+                "score": score,
+                "display": " | ".join(parts) if parts else "No active commercial workload configured",
+                "active_channel_count": active_channel_count,
+            }
+
         general_trade = _normalize_mapping(channel_data.get("general_trade"))
         modern_trade = _normalize_mapping(channel_data.get("modern_trade"))
         quick_commerce = _normalize_mapping(channel_data.get("quick_commerce"))
@@ -834,7 +873,7 @@ def align_manpower_sales(manpower_output, channel_sales_output):
             "active_channel_count": active_channel_count,
         }
 
-    sales_hc = int(channel_data.get("total_sales_hc", channel_data.get("total_commercial_hc", aligned.get("sales", 0))) or 0)
+    sales_hc = int(channel_data.get("sales_recommended_hc", channel_data.get("total_sales_hc", channel_data.get("total_commercial_hc", aligned.get("sales", 0)))) or 0)
     aligned["sales"] = sales_hc
     staffing_bands = dict(aligned.get("staffing_bands", {}) or {})
     sales_band = dict(staffing_bands.get("sales", {}) or {})
@@ -855,9 +894,9 @@ def align_manpower_sales(manpower_output, channel_sales_output):
         "upper_threshold_numeric": workload_total,
         "upper_threshold_display": "Role-specific",
         "threshold_display": "Role-specific",
-        "current_hc": sales_hc,
-        "recommended_hc": sales_hc,
-        "threshold_status": "Within Current Staffing Band",
+        "current_hc": int(channel_data.get("sales_current_hc", sales_hc) or sales_hc),
+        "recommended_hc": int(channel_data.get("sales_recommended_hc", sales_hc) or sales_hc),
+        "threshold_status": "Within Current Staffing Band" if str(channel_data.get("sales_reconciliation_status", "Reconciled")) == "Reconciled" else "Reconciliation Review",
         "business_reason": (
             "Sales staffing is governed by coverage, GT outlets and distributor spans, territories or beats, MT and QCommerce accounts, "
             "HoReCa service load, institutional tender coverage, export buyers, service frequency, and sales productivity. "
@@ -1589,11 +1628,85 @@ def build_channel_sales_output(
     automation_factor = max(0.5, _to_float(sales_automation_factor, 1.0))
     effective_capacity_multiplier = productivity_factor * digital_factor * self_service_factor * automation_factor
 
-    default_gt_outlets = 400
-    default_gt_distributors = 6
-    default_mt_accounts = 7
-    default_qcom_accounts = 2
-    default_ecommerce_accounts = 0
+    def _band_value(metric, bands):
+        for upper, value in bands:
+            if metric <= upper:
+                return value
+        return bands[-1][1]
+
+    def _derived_gt_outlets(total_revenue):
+        if total_revenue <= 0:
+            return 0
+        return int(_band_value(total_revenue, [
+            (40000000.0, 400),
+            (80000000.0, 500),
+            (150000000.0, 650),
+            (250000000.0, 850),
+            (float("inf"), 1000),
+        ]))
+
+    def _derived_distributors(outlets):
+        if outlets <= 0:
+            return 0
+        if outlets <= 400:
+            return 6
+        if outlets <= 600:
+            return 8
+        if outlets <= 800:
+            return 10
+        return int(math.ceil(outlets / 85.0))
+
+    def _derived_mt_accounts(mt_scale_revenue):
+        if mt_scale_revenue <= 0:
+            return 0
+        return int(_band_value(mt_scale_revenue, [
+            (6000000.0, 5),
+            (12000000.0, 8),
+            (25000000.0, 12),
+            (50000000.0, 16),
+            (float("inf"), 20),
+        ]))
+
+    def _derived_qcom_accounts(qcom_scale_revenue):
+        if qcom_scale_revenue <= 0:
+            return 0
+        return int(_band_value(qcom_scale_revenue, [
+            (3000000.0, 2),
+            (8000000.0, 3),
+            (15000000.0, 5),
+            (30000000.0, 8),
+            (float("inf"), 12),
+        ]))
+
+    def _derived_horeca_accounts(horeca_scale_revenue):
+        if horeca_scale_revenue <= 0:
+            return 0
+        return int(_band_value(horeca_scale_revenue, [
+            (10000000.0, 10),
+            (25000000.0, 14),
+            (40000000.0, 18),
+            (float("inf"), 24),
+        ]))
+
+    def _derived_institution_tenders(inst_scale_revenue):
+        if inst_scale_revenue <= 0:
+            return 0
+        return int(_band_value(inst_scale_revenue, [
+            (8000000.0, 1),
+            (20000000.0, 2),
+            (40000000.0, 4),
+            (float("inf"), 6),
+        ]))
+
+    def _derived_exports_markets(exports_scale_revenue):
+        if exports_scale_revenue <= 0:
+            return 0
+        return int(_band_value(exports_scale_revenue, [
+            (5000000.0, 1),
+            (15000000.0, 2),
+            (30000000.0, 3),
+            (float("inf"), 4),
+        ]))
 
     gt_revenue_capacity_per_distributor = (
         (distributor_output or {}).get("fresh_revenue_capacity_per_distributor", 4000000.0)
@@ -1603,9 +1716,9 @@ def build_channel_sales_output(
 
     outlets_per_exec_base = max(1.0, _to_float(gt_outlets_per_sales_executive, 120.0))
     outlets_per_exec_effective = max(1.0, outlets_per_exec_base * effective_capacity_multiplier)
-    derived_gt_outlets = default_gt_outlets if gt_revenue > 0 else 0
+    derived_gt_outlets = _derived_gt_outlets(revenue)
     gt_outlets = int(_to_float(gt_target_outlets, derived_gt_outlets)) if gt_target_outlets is not None else int(derived_gt_outlets)
-    required_distributors = 0 if gt_outlets <= 0 else default_gt_distributors
+    required_distributors = _derived_distributors(gt_outlets)
     gt_distributors_planned = int(_to_float(gt_distributors, required_distributors)) if gt_distributors is not None else int(required_distributors)
 
     distributors_per_manager_base = max(1.0, _to_float(distributors_per_manager, 8.0))
@@ -1616,13 +1729,13 @@ def build_channel_sales_output(
 
     mt_accounts_base = max(1.0, _to_float(mt_accounts_per_kam, 4.0))
     mt_accounts_effective = max(1.0, mt_accounts_base * effective_capacity_multiplier)
-    derived_mt_accounts = default_mt_accounts if mt_revenue > 0 else 0
+    derived_mt_accounts = _derived_mt_accounts(mt_revenue)
     mt_accounts = int(_to_float(mt_active_accounts, derived_mt_accounts)) if mt_active_accounts is not None else int(derived_mt_accounts)
     mt_hc = 0 if mt_accounts <= 0 else int(math.ceil(mt_accounts / mt_accounts_effective))
 
     qcom_accounts_base = max(1.0, _to_float(qcom_accounts_per_kam, 3.0))
     qcom_accounts_effective = max(1.0, qcom_accounts_base * effective_capacity_multiplier)
-    derived_qcom_accounts = default_qcom_accounts if qcom_revenue > 0 else 0
+    derived_qcom_accounts = _derived_qcom_accounts(qcom_revenue)
     qcom_buying_accounts = int(_to_float(qcom_buying_accounts, derived_qcom_accounts)) if qcom_buying_accounts is not None else int(derived_qcom_accounts)
     derived_qcom_regions = 0 if qcom_buying_accounts <= 0 else max(1, int(math.ceil(qcom_buying_accounts / 2.0)))
     qcom_buying_regions = int(_to_float(qcom_buying_regions, derived_qcom_regions)) if qcom_buying_regions is not None else int(derived_qcom_regions)
@@ -1632,25 +1745,25 @@ def build_channel_sales_output(
 
     ecommerce_accounts_base = max(1.0, _to_float(ecommerce_accounts_per_manager, 4.0))
     ecommerce_accounts_effective = max(1.0, ecommerce_accounts_base * effective_capacity_multiplier)
-    derived_ecommerce_accounts = default_ecommerce_accounts if ecommerce_revenue > 0 else 0
+    derived_ecommerce_accounts = 0 if ecommerce_revenue <= 0 else max(1, int(math.ceil(ecommerce_revenue / 8000000.0)))
     ecommerce_accounts = int(_to_float(ecommerce_active_accounts, derived_ecommerce_accounts)) if ecommerce_active_accounts is not None else int(derived_ecommerce_accounts)
     ecommerce_hc = 0 if ecommerce_accounts <= 0 else int(math.ceil(ecommerce_accounts / ecommerce_accounts_effective))
 
     horeca_accounts_base = max(1.0, _to_float(horeca_accounts_per_manager, 4.0))
     horeca_accounts_effective = max(1.0, horeca_accounts_base * effective_capacity_multiplier)
-    derived_horeca_accounts = 0 if horeca_revenue <= 0 else max(1, int(math.ceil(horeca_revenue / max(1.0, _to_float(horeca_revenue_per_sales_executive, 1.0) / horeca_accounts_base))))
+    derived_horeca_accounts = _derived_horeca_accounts(horeca_revenue)
     horeca_accounts = int(_to_float(horeca_active_accounts, derived_horeca_accounts)) if horeca_active_accounts else int(derived_horeca_accounts)
     horeca_hc = 0 if horeca_accounts <= 0 else int(math.ceil(horeca_accounts / horeca_accounts_effective))
 
     institutional_tenders_base = max(1.0, _to_float(institutional_tenders_per_manager, 4.0))
     institutional_tenders_effective = max(1.0, institutional_tenders_base * effective_capacity_multiplier)
-    derived_institution_tenders = 1 if inst_revenue > 0 else 0
+    derived_institution_tenders = _derived_institution_tenders(inst_revenue)
     institution_tenders = int(_to_float(institutional_active_tenders, derived_institution_tenders)) if institutional_active_tenders is not None else int(derived_institution_tenders)
     inst_hc = 0 if institution_tenders <= 0 else int(math.ceil(institution_tenders / institutional_tenders_effective))
 
     exports_buyers_base = max(1.0, _to_float(exports_buyers_per_manager, 3.0))
     exports_buyers_effective = max(1.0, exports_buyers_base * effective_capacity_multiplier)
-    derived_exports_markets = 0 if exports_revenue <= 0 else max(1, int(math.ceil(exports_revenue / 12000000.0)))
+    derived_exports_markets = _derived_exports_markets(exports_revenue)
     exports_markets = int(_to_float(exports_active_markets, derived_exports_markets)) if exports_active_markets is not None else int(derived_exports_markets)
     derived_exports_buyers = 0 if exports_markets <= 0 else max(1, exports_markets * 2)
     exports_buyers = int(_to_float(exports_active_buyers, derived_exports_buyers)) if exports_active_buyers is not None else int(derived_exports_buyers)
@@ -1717,6 +1830,19 @@ def build_channel_sales_output(
         sales_operational_workload_parts.append(f"{exports_markets:,.0f} export markets")
     if active_channel_count:
         sales_operational_workload_parts.append(f"{active_channel_count:,.0f} active {'channel' if active_channel_count == 1 else 'channels'}")
+    sales_workload = {
+        "gt_target_outlets": gt_outlets,
+        "gt_distributors": gt_distributors_planned,
+        "gt_territories_or_beats": gt_beats,
+        "mt_active_accounts": mt_accounts,
+        "qcom_buying_accounts": qcom_buying_accounts,
+        "qcom_buying_regions": qcom_buying_regions,
+        "horeca_active_accounts": horeca_accounts,
+        "institutional_active_tenders": institution_tenders,
+        "export_active_buyers": exports_buyers,
+        "export_active_markets": exports_markets,
+        "active_channel_count": active_channel_count,
+    }
     sales_coordinator = 1 if (total_active_accounts_supported >= 40 or frontline_hc >= 8) else 0
 
     commercial_hc_sum = (
@@ -1859,9 +1985,13 @@ def build_channel_sales_output(
         "total_markets_supported": max(1, qcom_buying_regions + exports_markets),
         "total_active_accounts_supported": total_active_accounts_supported,
         "sales_workload_driver_total": sales_operational_workload_score,
+        "sales_workload": sales_workload,
         "sales_operational_workload_score": sales_operational_workload_score,
         "sales_operational_workload_display": " | ".join(sales_operational_workload_parts) if sales_operational_workload_parts else "No active commercial workload configured",
         "sales_active_channel_count": active_channel_count,
+        "sales_recommended_hc": total_hc,
+        "sales_current_hc": total_hc,
+        "sales_reconciliation_status": "Reconciled" if commercial_hc_reconciled else "Mismatch",
         "general_trade": {
             "revenue": gt_revenue,
             "required_distributors": required_distributors,
