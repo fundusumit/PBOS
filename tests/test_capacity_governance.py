@@ -103,6 +103,63 @@ class PlantNormalizationHotfixTests(unittest.TestCase):
         result = build_plant_planning(plant=plant, assigned_markets=self.assigned_markets)
         self.assertIn("plant_capacity_output", result)
 
+
+class ManpowerNormalizationHotfixTests(unittest.TestCase):
+    def setUp(self):
+        self.assigned_markets = pd.DataFrame([
+            {
+                "city": "Kolkata",
+                "revenue_allocation_cr": 10.0,
+                "assigned_plant_id": "PLANT_KOL",
+            }
+        ])
+
+    def test_a_dict_input_runs(self):
+        manpower = {
+            "total_hc": 76,
+            "production_hc": 46,
+        }
+        result = build_plant_planning(assigned_markets=self.assigned_markets, manpower=manpower)
+        self.assertIn("manpower_output", result)
+
+    def test_b_series_input_runs(self):
+        manpower = pd.Series(
+            {
+                "total_hc": 76,
+                "production_hc": 46,
+            }
+        )
+        result = build_plant_planning(assigned_markets=self.assigned_markets, manpower=manpower)
+        self.assertIn("manpower_output", result)
+
+    def test_c_none_input_returns_empty_mapping(self):
+        result = build_plant_planning(assigned_markets=self.assigned_markets, manpower=None)
+        self.assertEqual(result["manpower_output"], {})
+
+    def test_d_output_type_is_dict(self):
+        result_dict = build_plant_planning(
+            assigned_markets=self.assigned_markets,
+            manpower={"total_hc": 76, "production_hc": 46},
+        )
+        result_series = build_plant_planning(
+            assigned_markets=self.assigned_markets,
+            manpower=pd.Series({"total_hc": 76, "production_hc": 46}),
+        )
+        result_none = build_plant_planning(assigned_markets=self.assigned_markets, manpower=None)
+        self.assertIsInstance(result_dict["manpower_output"], dict)
+        self.assertIsInstance(result_series["manpower_output"], dict)
+        self.assertIsInstance(result_none["manpower_output"], dict)
+
+    def test_e_values_unchanged_after_normalization(self):
+        manpower_dict = {"total_hc": 76, "production_hc": 46}
+        manpower_series = pd.Series({"total_hc": 76, "production_hc": 46})
+        result_dict = build_plant_planning(assigned_markets=self.assigned_markets, manpower=manpower_dict)
+        result_series = build_plant_planning(assigned_markets=self.assigned_markets, manpower=manpower_series)
+        self.assertEqual(result_dict["manpower_output"].get("total_hc"), 76)
+        self.assertEqual(result_dict["manpower_output"].get("production_hc"), 46)
+        self.assertEqual(result_series["manpower_output"].get("total_hc"), 76)
+        self.assertEqual(result_series["manpower_output"].get("production_hc"), 46)
+
     def test_b_series_input_runs(self):
         plant = pd.Series(
             {

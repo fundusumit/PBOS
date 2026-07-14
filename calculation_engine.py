@@ -3,6 +3,9 @@ import math
 import pandas as pd
 
 
+_UNSET = object()
+
+
 def load_registry(path):
     try:
         return pd.read_csv(path)
@@ -606,13 +609,14 @@ def build_manpower_output(raw_material_output, plant_capacity_output, channel_mi
 
 
 def align_manpower_sales(manpower_output, channel_sales_output):
-    aligned = dict(manpower_output or {})
-    sales_hc = int((channel_sales_output or {}).get("total_sales_hc", (channel_sales_output or {}).get("total_commercial_hc", aligned.get("sales", 0))) or 0)
+    aligned = _normalize_mapping(manpower_output)
+    channel_data = _normalize_mapping(channel_sales_output)
+    sales_hc = int(channel_data.get("total_sales_hc", channel_data.get("total_commercial_hc", aligned.get("sales", 0))) or 0)
     aligned["sales"] = sales_hc
     staffing_bands = dict(aligned.get("staffing_bands", {}) or {})
     sales_band = dict(staffing_bands.get("sales", {}) or {})
     sales_band.update({
-        "current_workload": _to_float((channel_sales_output or {}).get("selected_market_revenue", sales_band.get("current_workload", 0.0)), 0.0),
+        "current_workload": _to_float(channel_data.get("selected_market_revenue", sales_band.get("current_workload", 0.0)), 0.0),
         "current_staffing_band": "channel coverage threshold",
         "current_hc": sales_hc,
         "recommended_hc": sales_hc,
@@ -1555,7 +1559,7 @@ def build_financial_chain(product_mix=None, channel_mix=None, product_registry=N
     }
 
 
-def build_plant_planning(plant=None, assigned_markets=None, product_mix=None, channel_mix=None, product_registry=None, channel_registry=None, pricing_registry=None, cost_registry=None, avg_bird_weight=1.8, working_days=25, stage_profile=None, live_bird_rate=None, yield_pct=None, operating_model=None, business_stage=None, utilization_threshold_pct=85.0, plant_capacity_per_line_mt_day=10.0, working_hours_per_shift=8.0, max_shifts=3, cold_storage_buffer_days=3, procurement_drivers=None, mortality_pct=None, processing_loss_pct=None, gt_distributor_margin_pct=None, packaging_cost_per_kg=None, transport_cost_per_kg=None, trader_margin_pct=None, farm_margin_pct=None):
+def build_plant_planning(plant=None, assigned_markets=None, product_mix=None, channel_mix=None, product_registry=None, channel_registry=None, pricing_registry=None, cost_registry=None, avg_bird_weight=1.8, working_days=25, stage_profile=None, live_bird_rate=None, yield_pct=None, operating_model=None, business_stage=None, utilization_threshold_pct=85.0, plant_capacity_per_line_mt_day=10.0, working_hours_per_shift=8.0, max_shifts=3, cold_storage_buffer_days=3, procurement_drivers=None, mortality_pct=None, processing_loss_pct=None, gt_distributor_margin_pct=None, packaging_cost_per_kg=None, transport_cost_per_kg=None, trader_margin_pct=None, farm_margin_pct=None, manpower=_UNSET):
     assigned_revenue = 0.0
     if assigned_markets is not None and not getattr(assigned_markets, "empty", True):
         for col in ("revenue_allocation_cr", "monthly_revenue", "revenue", "assigned_market_revenue", "target_revenue"):
@@ -1615,6 +1619,11 @@ def build_plant_planning(plant=None, assigned_markets=None, product_mix=None, ch
         existing_plant_expandable=expandable_flag,
         expansion_line_increment=1,
     )
+    if manpower is _UNSET:
+        manpower_data = _normalize_mapping(result.get("manpower_output", {}))
+    else:
+        manpower_data = _normalize_mapping(manpower)
+    result["manpower_output"] = manpower_data
     result["assigned_market_revenue"] = assigned_revenue
     return result
 
